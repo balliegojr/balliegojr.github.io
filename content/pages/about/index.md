@@ -8,10 +8,10 @@ hide_page_meta = true
 
 <div style="display: flex; justify-content: center; gap: 10px">
     <a href="https://github.com/balliegojr" target="_blank">
-        {{ image(src="logos/github/github-mark-white.svg", style="height: 36px; ") }}
+        {{ image(src="/logos/github/github-mark-white.svg", style="height: 36px; ") }}
     </a>
     <a href="https://linkedin.com/in/ilson-balliego" target="_blank">
-        {{ image(src="logos/LI-In-Bug.png", style="height: 36px; ") }}
+        {{ image(src="/logos/LI-In-Bug.png", style="height: 36px; ") }}
     </a>
 </div>
 

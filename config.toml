@@ -1,6 +1,6 @@
 # The URL the site will be built for
 base_url = "https://balliegojr.github.io"
-title = "iballiego"
+title = "balliegojr"
 taxonomies = [
     {name = "tags"},
 ]
@@ -24,7 +24,7 @@ smart_punctuation = true
 [extra]
 # Put all your custom variables here
 author = "Ilson Balliego"
-logo_text = "iballiego"
+logo_text = "balliegojr"
 page_titles = "combined"
 accent_color = "blue"
 background_color = "dark"
