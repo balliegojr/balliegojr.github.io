@@ -12,13 +12,9 @@ In this post we are going to explore the concept of a state machine to help orga
 <!-- more -->
 ___
 
-# Note
+# Code
 
-<a href="https://github.com/balliegojr/state-machine" target="_blank">
-Shutup and show me the code
-</a>
-
-The code examples in the post use async/await functions. The code in the github repository uses only sync functions, for benchmarking purposes.
+The code seen in the snippets is available <a href="https://github.com/balliegojr/state-machine" target="_blank">here</a>, as well as a benchmark.
 
 ___
 
@@ -59,13 +55,12 @@ Data carrying enums are perfect for implementing a state machine, because they i
 
 There are a few ways that we can implement this when using enums. One possible way is by using self consuming states.
 
+We need a trait and an executor function, since we want it to be generic.
 ```rust
-#![feature(async_fn_in_trait)] 
-// This implementation uses a nightly feature, but it is interchangeable with async_trait crate
-
 /// A trait that represents the state machine
-pub trait InternallyDrivenTransition {
-    async fn execute(self) -> Result<Self, Box<dyn Error>>
+/// This will be implemented for every state machine enum
+pub trait StateMachine {
+    fn execute(self) -> Result<Self, Box<dyn Error>>
     where
         Self: Sized;
 
@@ -74,18 +69,22 @@ pub trait InternallyDrivenTransition {
 
 
 /// An executor that drives that state machine
-pub async fn internally_driven_executor<T: InternallyDrivenTransition>(
+pub fn executor<T: StateMachine>(
     initial_state: T,
 ) -> Result<(), Box<dyn Error>> {
     let mut current_state = initial_state;
 
     while !current_state.is_terminal_state() {
-        current_state = current_state.execute().await?;
+        current_state = current_state.execute()?;
     }
 
     Ok(())
 }
+```
 
+The trait has two functions, `execute` will be called to run that state to completion, `is_terminal_state` defines which states will end the state machine execution.  
+
+```rust
 /// These are all the possible states for this state machine
 pub enum FullStateMachine {
     DiscoverNodes(DiscoverNodes),
@@ -97,24 +96,24 @@ pub enum FullStateMachine {
 }
 
 
-impl InternallyDrivenTransition for FullStateMachine {
-    async fn execute(self) -> Result<Self, Box<dyn Error>>
+impl StateMachine for FullStateMachine {
+    fn execute(self) -> Result<Self, Box<dyn Error>>
     where
         Self: Sized,
     {
         // Execution and transition are achieved in the same place
         match self {
             FullStateMachine::DiscoverNodes(discover_nodes) => {
-                let nodes = discover_nodes.execute().await;
+                let nodes = discover_nodes.execute();
                 Ok(FullStateMachine::ConnectNodes(ConnectNodes::new(nodes)))
             }
             FullStateMachine::ConnectNodes(connect_nodes) => {
-                let connections = connect_nodes.execute().await;
+                let connections = connect_nodes.execute();
                 Ok(FullStateMachine::Consensus(Consensus::new(connections)))
             }
             FullStateMachine::Consensus(consensus) => {
                 // Conditional state transition
-                let (is_leader, connections) = consensus.execute().await;
+                let (is_leader, connections) = consensus.execute();
                 if is_leader {
                     Ok(FullStateMachine::Leader(Leader::new(connections)))
                 } else {
@@ -122,11 +121,11 @@ impl InternallyDrivenTransition for FullStateMachine {
                 }
             }
             FullStateMachine::Leader(leader) => {
-                leader.execute().await;
+                leader.execute();
                 Ok(FullStateMachine::Terminate)
             }
             FullStateMachine::Follower(follower) => {
-                follower.execute().await;
+                follower.execute();
                 Ok(FullStateMachine::Terminate)
             }
             FullStateMachine::Terminate => {
@@ -143,53 +142,48 @@ impl InternallyDrivenTransition for FullStateMachine {
 ```
 
 What I like about this implementation:
-- The executor is very straight forward, it starts with a initial state, it calls the `execute` function and replace the current state until it reaches a terminal state. 
+- The executor is very straight forward, it starts with a initial state and then calls the `execute` function and replace the current state until it reaches a terminal state. 
 - The `execute` function consumes the current state and returns a new one, this makes internal state management simple and decoupled.
 - Conditional state transition is easy to achieve, event with async code
 
-There is one detail about this particular implementation, the execution and transition happen in the same function, this can be a problem, particularly if the state machine has a lot of states. 
+There is one detail about this particular implementation that I don't like, the execution and transition happen in the same function, this can be a problem, particularly if the state machine has a lot of states. 
 
-Here we have a variation with different execute and transition functions, this one also works with external input for the transition.
+Lets fix that
+
 
 ```rust
-pub trait ExternallyDrivenTransition {
-    type EventType;
-
-    async fn execute(&mut self, input: Self::EventType) -> Result<(), Box<dyn Error>>;
+pub trait StateMachine {
+    fn execute(&mut self) -> Result<(), Box<dyn Error>>;
     fn is_terminal_state(&self) -> bool;
     fn transition(self) -> Self;
 }
 
-pub async fn externally_driven_executor<T: ExternallyDrivenTransition>(
+pub fn executor<T: StateMachine>(
     initial_state: T,
-    events: Receiver<T::EventType>,
 ) -> Result<(), Box<dyn Error>> {
     let mut current_state = initial_state;
 
-    while let Ok(input) = events.recv() {
-        current_state.execute(input).await?;
-
+    while !current_state.is_terminal_state() {
+        current_state.execute()?;
         current_state = current_state.transition();
-        if current_state.is_terminal_state() {
-            break;
-        }
     }
 
     Ok(())
 }
 
-pub enum ExternalEvent {}
+```
 
-impl ExternallyDrivenTransition for FullStateMachine {
-    type EventType = ExternalEvent;
+Now we have `execute` and `transition` as two separate functions, lets see how the implementation of the state machine looks like.
 
-    async fn execute(&mut self, input: Self::EventType) -> Result<(), Box<dyn Error>> {
+```rust
+impl StateMachine for FullStateMachine {
+     fn execute(&mut self) -> Result<(), Box<dyn Error>> {
         match self {
-            FullStateMachine::DiscoverNodes(state) => state.execute(input).await,
-            FullStateMachine::ConnectNodes(state) => state.execute(input).await,
-            FullStateMachine::Consensus(state) => state.execute(input).await,
-            FullStateMachine::Leader(state) => state.execute(input).await,
-            FullStateMachine::Follower(state) => state.execute(input).await,
+            FullStateMachine::DiscoverNodes(state) => state.execute(),
+            FullStateMachine::ConnectNodes(state) => state.execute(),
+            FullStateMachine::Consensus(state) => state.execute(),
+            FullStateMachine::Leader(state) => state.execute(),
+            FullStateMachine::Follower(state) => state.execute(),
             FullStateMachine::Terminate => unreachable!(),
         }
     }
@@ -220,29 +214,90 @@ impl ExternallyDrivenTransition for FullStateMachine {
     }
 }
 ```
-Now we have smaller `execute` and `transition` functions, and both do only one thing. However, with this implementation, the `execute` function receives a `&mut self`, this means we may need to keep more state around, and maybe clone some state. Let's compare the `DiscoverNodes` for both implementations
 
+With the `execute` and `transition` functions, the code is simpler, easier to understand.  
+
+There is a downside however, since `execute` takes a reference to self, each state needs to hold any intermediate state until `transition` is called. If we look at the `DiscoverNodes` implementation for both versions, we can see the difference.  
 
 ```rust
 // First implementation, with self consuming state
+struct DiscoverNodes;
+
 impl DiscoverNodes {
-    pub async fn execute(self) -> Result<(Vec<IpAddr>), Box<dyn Error>> {
-        Ok(crate::get_service_nodes().await)
+    pub fn execute(self) -> Result<(Vec<IpAddr>), Box<dyn Error>> {
+        Ok(crate::get_service_nodes())
     }
 }
 
 // Second implementation
+struct DiscoverNodes { 
+    pub nodes: Vec<IpAddr>
+}
+
 impl DiscoverNodes {
-    pub async fn execute(&mut self, _input: ExternalEvent) -> Result<(), Box<dyn Error>> {
+    pub fn execute(&mut self) -> Result<(), Box<dyn Error>> {
         // We need to keep the state around until transition is called
-        self.nodes = crate::get_service_nodes().await; 
+        self.nodes = crate::get_service_nodes(); 
         Ok(())
     }
 }
 ```
 
-## Downsides
-With the enum implementation, the transition control is tied to the enum, if you want to implement a similar state machine, you need to implement everything again.
+Both implementations we have seen so far expects that each `execute` call drives the state to completion, we can easily modify the code to react to external events. 
+Lets see how to do it.  
+
+```rust
+pub trait ExternallyDrivenTransition {
+    type EventType;
+
+    fn execute(&mut self, input: Self::EventType) -> Result<(), Box<dyn Error>>;
+
+    fn is_terminal_state(&self) -> bool;
+    fn transition(self) -> Self;
+}
+
+pub fn externally_driven_executor<T: ExternallyDrivenTransition>(
+    initial_state: T,
+    events: Receiver<T::EventType>,
+) -> Result<(), Box<dyn Error>> {
+    let mut current_state = initial_state;
+
+    while let Ok(input) = events.recv() {
+        current_state.execute(input)?;
+
+        current_state = current_state.transition();
+        if current_state.is_terminal_state() {
+            break;
+        }
+    }
+
+    Ok(())
+}
+
+pub enum ExternalEvent {
+...
+}
+
+impl ExternallyDrivenTransition for FullStateMachine {
+    type EventType = ExternalEvent;
+
+    fn execute(&mut self, input: Self::EventType) -> Result<(), Box<dyn Error>> {
+        match self {
+            FullStateMachine::DiscoverNodes(state) => state.execute(input),
+            FullStateMachine::ConnectNodes(state) => state.execute(input),
+            FullStateMachine::Consensus(state) => state.execute(input),
+            FullStateMachine::Leader(state) => state.execute(input),
+            FullStateMachine::Follower(state) => state.execute(input),
+            FullStateMachine::Terminate => unreachable!(),
+        }
+    }
+}
+```
+
+
+## Downsides of enums 
+With the enum implementation, the transition control is tied to the enum, if you want to implement a similar state machine, you need to implement everything again. 
+This may not be a problem if you only have one process, or process that do not overlap at all, otherwise there will be some boilerplate code to be written.
 
 ```rust
 pub enum FullStateMachine {
@@ -273,65 +328,70 @@ impl ExternallyDrivenTransition for ConsensusLessStateMachine {
 
 # Traits implementation
 
-One way to address the downside from the enum implementation, is to implement a trait for the states and have an executor that works with `Box<dyn State>` states, the implementation will look like this
+One way to address the downside from the enum implementation, is to implement a trait for the states and have an executor that works with `Box<dyn State>` states, the implementation will look like this. 
 
-```
-// We need to use async_trait here, because we receive a Box<Self> parameter
-#[async_trait]
+```rust
 pub trait State {
-    async fn execute(self: Box<Self>) -> Result<Option<Box<dyn State>>, Box<dyn Error>>;
+    fn execute(self: Box<Self>) -> Result<Option<Box<dyn State>>, Box<dyn Error>>;
 }
 
-pub async fn executor(initial_state: Box<dyn State>) -> Result<(), Box<dyn Error>> {
+pub fn executor(initial_state: Box<dyn State>) -> Result<(), Box<dyn Error>> {
     let mut current_state = Some(initial_state);
 
     while let Some(state) = current_state {
-        current_state = state.execute().await?;
+        current_state = state.execute()?;
     }
 
     Ok(())
 }
 ```
+The implementation is very similar to the enum, except the termination control is done by return an `Option`.
 
-We can already see some downsides for this implementation.
+--- 
 
-First, it introduces a performance penalty because every state is boxed, this may or may not be important for your use case, but it is something to have in mind.
+This version has some clear downsides over the enum implementation.  
 
-Second, this implementation is even less re-usable than the last one, because it delegates the flow to inside the state, we can take a look in the `DiscoverNodes` implementation
+First, it introduces a performance penalty by boxing the state, this may or may not be important for your use case, but it is something to have in mind.
 
-```
+Second, it is even less re-usable than the enum version, because it delegates the flow to inside the state. Lets see how the `DiscoverNodes` would look like with this version
+
+```rust
 pub struct DiscoverNodes {}
-#[async_trait]
 impl State for DiscoverNodes {
-    async fn execute(self: Box<Self>) -> Result<Option<Box<dyn State>>, Box<dyn Error>> {
-        let nodes = crate::get_service_nodes().await;
+    fn execute(self: Box<Self>) -> Result<Option<Box<dyn State>>, Box<dyn Error>> {
+        let nodes = crate::get_service_nodes();
+
+        // Here we define what is the next state
         Ok(Some(Box::new(ConnectNodes::new(nodes))))
     }
 }
 ```
 
-This design makes the code even harder to understand and to reuse, making it a very bad choice, considering what our goals are.  
+This design makes the code even harder to understand and to reuse. If you want to have a different state after the `DiscoverNodes`, you need to introduce an internal condition and way to drive that condition, and this becomes even more cumbersome as you go further in the state machine flow, making this a very bad choice for a state machine design, considering what our goals are.  
 
 However, there is another way we can implement this, by using one of Rust nicest features, blanket implementations!
 
 # Composable traits [Blanket implementations]
 
 In Rust, it is possible to implement a trait for every type in your code
-```
+```rust
 impl<T> MyTrait for T {}
 ```
 
 We can use this feature to implement our state machine in a very composable way
-```
-first_state.and_then(NextState::new).execute().await;
+```rust
+first_state::new()
+    .and_then(SecondState::new)
+    .and_then(ThirdState::new)
+    .execute();
 ```
 
 Lets see how we can do that
-```
+```rust
 pub trait State {
     type Output;
 
-    async fn execute(self) -> Result<Self::Output, Box<dyn Error>>;
+    fn execute(self) -> Result<Self::Output, Box<dyn Error>>;
 }
 
 pub trait StateComposer {}
@@ -344,23 +404,35 @@ Nice, we have our base structure in place, now we are going to add functions to 
 
 ## AndThen
 
-The `and_then` implementation will accept a closure that receives the output from the previous state and creates a new state
+The `and_then` implementation will accept a closure that receives the output from the previous state and creates a new state. 
 
-```
-// We need a structure to hold our closure
+First we need a struct to hold the State transition
+```rust
 pub struct AndThen<T, U, F> {
     previous: T,
     map_fn: F,
     _marker: PhantomData<U>,
 }
+```
 
+Without constraints, the struct itself is nothing special.
+- `previous: T` holds "everything before the ." in our chain call.  
+- `map_fn: F` holds our closure that constructs the next step.
+- `_marker: PhantomData<U>` holds the return type of our state
+
+Fun fact, without the `_marker` field, if you try to compile the code with the nightly async feature, it will crash the compiler.
+
+___
+
+Now we need to add a new function to the `StateComposer` trait
+```rust
 pub trait StateComposer {
     // The StateComposer just need to return our struct, nothing more
-    fn and_then<T, F>(self, map_fn: F) -> AndThen<Self, T, F>
+    fn and_then<U, F>(self, map_fn: F) -> AndThen<Self, U, F>
     where
         Self: State + Sized,
-        T: State,
-        F: FnOnce(Self::Output) -> T,
+        U: State,
+        F: FnOnce(Self::Output) -> U,
     {
         AndThen {
             previous: self,
@@ -369,9 +441,20 @@ pub trait StateComposer {
         }
     }
 }
+```
 
-// Last, we need to implement State for our new struct
-// This will allow us to chain call and_then for all the states
+When we call this function, it will build a new State type, and for every new call, a new type will be built, very similar to what we have with Iterators, for example:
+```rust
+let state = One::new().and_then(|out: String| Two::new(out));
+// state: AndThen<One, Two, fn(String) -> Two>
+
+let state = state.and_then(|out: u64| Third::new(out));
+// state: AndThen<AndThen<One, Two, fn(String) -> Two>, Third, fn(u64) -> Third>
+```
+
+Last but not least, we need to implement the `State` trait for our new `AndThen` struct
+
+```rust
 impl<T, U, F> State for AndThen<T, U, F>
 where
     T: State,
@@ -380,46 +463,58 @@ where
 {
     type Output = U::Output;
 
-    async fn execute(self) -> Result<Self::Output, Box<dyn Error>>
+    fn execute(self) -> Result<Self::Output, Box<dyn Error>>
     where
         Self: Sized,
     {
-        let previous_output = self.previous.execute().await?;
+        // Execute the previous state, or "everything before the ."
+        let previous_output = self.previous.execute()?;
+
+        // call the map function to create the next task
         let next_task = (self.map_fn)(previous_output);
-        next_task.execute().await
+
+        // execute the next task
+        next_task.execute()
     }
 }
 ```
 
-With this in place, we can now use our States in a very composable way
-```
+Neat! Now that we have everything in place, we can use our States in a very composable way.
+```rust
 DiscoverNodes
     .and_then(ConnectNodes::new)
     .and_then(Consensus::new)
     .and_then(LeaderOrFollower::new)
     .execute()
-    .await
 ```
 
 And if we want a different flow using the same states? Easy!!!
-```
+```rust
 DiscoverNodes
     .and_then(ConnectNodes::new)
     .and_then(Leader::new)
     .execute()
-    .await
 ```
 
-Other composable functions can be added to your composer, some examples are
+The `StateComposer` trait can be extended with how many functions you want, some examples can be:
 - `and` that ignores the output from the previous state
-- `or` or `and_default` that will continue execution even if the previous steps failed
+- `or` or `and_default` that will continue execution even if the previous steps have failed
 - `loop` that will execute the same state multiple times
 
-The major benefit of this approach, your workflow is validated at compile time and it is very explicit. However, this approach have one big downside compared to the previous ones, it doesn't allow conditional states, if you need conditional states, there are two possible solutions.
-
-One is to change the `execute` function to receive `self: Box<self>`, another way is to have one step that is responsible for chosing the next state, like so
-
+```rust
+DiscoverNodes
+    .and_then(ConnectNodes::new)
+    .and_then(Consensus::new)
+    .and_then(LeaderOrFollower::new)
+    .and_then_default_to(|| Daemon::new().loop())
+    .execute()
 ```
+
+The major benefit of this approach, your workflow is validated at compile time and it is very explicit.  
+
+However, this approach have one big downside compared to the previous ones, it doesn't allow conditional states, if you need conditional states, you need to implement an additional State.
+
+```rust
 pub struct LeaderOrFollower {
     is_leader: bool,
     connections: Vec<NodeConnection>,
@@ -428,11 +523,11 @@ pub struct LeaderOrFollower {
 impl State for LeaderOrFollower {
     type Output = ();
 
-    async fn execute(self) -> Result<Self::Output, Box<dyn Error>> {
+    fn execute(self) -> Result<Self::Output, Box<dyn Error>> {
         if self.is_leader {
-            Leader::new(self.connections).execute().await
+            Leader::new(self.connections).execute()
         } else {
-            Follower::new(self.connections).execute().await
+            Follower::new(self.connections).execute()
         }
     }
 }
@@ -451,7 +546,7 @@ I don't really trust "it ran on my machine" benchmarks, so I highly encourage yo
 
 # Conclusion
 
-Time for a very opinionated conclusion....   
+Time for a very opinionated conclusion...   
 
 My favorite approach is, of course, the composable trait implementation - I even had to write a blog post about it!!! - I think it makes for very clean and reusable code with minimal overhead. 
 
