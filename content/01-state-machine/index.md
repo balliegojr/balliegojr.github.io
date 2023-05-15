@@ -1,22 +1,21 @@
 +++
 title = "Taking advantage of state machine concepts to organize code"
 description =  "In this post we are going to explore the concept of a state machine to help organize our code. The goal is to explore different code designs, rather than build a full blown state machine."
-date = 2023-05-05
-draft = true
+date = 2023-05-15
 slug = "state-machine"
-tags = ["state machine", "enums", "traits"]
+language = "en"
+
+[taxonomies]
+tags = ["rust", "state machine", "enums", "traits"]
 +++
 
 In this post we are going to explore the concept of a state machine to help organize our code. The goal is to explore different code designs, rather than build a full blown state machine.
 
 <!-- more -->
-___
 
-# Code
-
-The code seen in the snippets is available <a href="https://github.com/balliegojr/state-machine" target="_blank">here</a>, as well as a benchmark.
-
-___
+{% box(title="Code") %}
+    The code seen in the snippets is available <a href="https://github.com/balliegojr/state-machine" target="_blank">here</a>, as well as the benchmarks.
+{% end %}
 
 
 # What is a state machine?
@@ -27,13 +26,14 @@ The FSM can change from one state to another in response to some inputs; the cha
 
 Think about it as a sequence of individual steps, where only one step can be executed at a time. Very simple.
 
-I think this abstraction is particularly useful for synchronization protocols. Imagine you need to synchronize the action of multiple nodes.
-Whenever a node enters a state, it only cares about the data related to that particular state. By advancing all the nodes to the next state at the same time, 
-the synchronization becomes simpler, it is easy to identify problems by just looking if a node is on a different state.
+{% box(title="Opinion") %}
+The state machine abstraction is particularly useful for synchronization in a distributed system. By splitting a process into smaller steps, it is possible to synchronize the execution on different nodes by advancing the node to next state. Whenever a node enters a state, it only cares about the data related to that particular state. A simple log on the state transitions will be enough to identify if a node is in the expected state, which will make your life easier when trying to identify problems.
 
-By using a state machine abstraction, your code can be simpler and easier to understand, which will lessen the possibility of bugs.
+By using a state machine abstraction, your code can be simpler and easier to understand, which will decrease the likelihood of bugs.
 
-# Implementation requirements
+{% end %}
+
+# Implementation Goals
 
 The goal is to write code that is easy to read, write, and reuse.
 
@@ -49,7 +49,7 @@ We are going to implement a pseudo consensus process. The steps are:
 We are going to try a few different implementations, first we will use enums and then traits, and of course, we are going to benchmark them.
 
 
-# Enum implementation
+# Implementation #1: Enums
 
 Data carrying enums are perfect for implementing a state machine, because they impose the **one state at a time** rule by design
 
@@ -148,7 +148,7 @@ What I like about this implementation:
 
 There is one detail about this particular implementation that I don't like, the execution and transition happen in the same function, this can be a problem, particularly if the state machine has a lot of states. 
 
-Lets fix that
+Let's fix that
 
 
 ```rust
@@ -173,7 +173,7 @@ pub fn executor<T: StateMachine>(
 
 ```
 
-Now we have `execute` and `transition` as two separate functions, lets see how the implementation of the state machine looks like.
+Now we have `execute` and `transition` as two separate functions, let's see how the implementation of the state machine looks like.
 
 ```rust
 impl StateMachine for FullStateMachine {
@@ -244,7 +244,7 @@ impl DiscoverNodes {
 ```
 
 Both implementations we have seen so far expects that each `execute` call drives the state to completion, we can easily modify the code to react to external events. 
-Lets see how to do it.  
+Let's see how to do it.  
 
 ```rust
 pub trait ExternallyDrivenTransition {
@@ -326,7 +326,7 @@ impl ExternallyDrivenTransition for ConsensusLessStateMachine {
 }
 ```
 
-# Traits implementation
+# Implementation #2: Traits
 
 One way to address the downside from the enum implementation, is to implement a trait for the states and have an executor that works with `Box<dyn State>` states, the implementation will look like this. 
 
@@ -353,7 +353,7 @@ This version has some clear downsides over the enum implementation.
 
 First, it introduces a performance penalty by boxing the state, this may or may not be important for your use case, but it is something to have in mind.
 
-Second, it is even less re-usable than the enum version, because it delegates the flow to inside the state. Lets see how the `DiscoverNodes` would look like with this version
+Second, it is even less re-usable than the enum version, because it delegates the flow to inside the state. Let's see how the `DiscoverNodes` would look like with this version
 
 ```rust
 pub struct DiscoverNodes {}
@@ -371,7 +371,7 @@ This design makes the code even harder to understand and to reuse. If you want t
 
 However, there is another way we can implement this, by using one of Rust nicest features, blanket implementations!
 
-# Composable traits [Blanket implementations]
+# Implementation #3: Composable traits
 
 In Rust, it is possible to implement a trait for every type in your code
 ```rust
@@ -386,7 +386,7 @@ first_state::new()
     .execute();
 ```
 
-Lets see how we can do that
+Let's see how we can do that
 ```rust
 pub trait State {
     type Output;
@@ -539,10 +539,9 @@ There is a benchmark in the github repo to compare the overhead of each of these
 
 {{ image(src="./violin.svg", style="background-color: white") }}
 
-I believe the composing approach has better performance due to the lack of an executor loop function. But the overhead seems to be minimal.
+I am not exactly sure of why the composable performance is better, I believe it is due to the lack of an executor loop function. 
 
-I don't really trust "it ran on my machine" benchmarks, so I highly encourage you to download the code and try it yourself.
-
+The benchmark only looks at execution speed, I don't know how to do a memory benchmark, but my guess is the composable approach will have the worst memory consumption of all three implementations.
 
 # Conclusion
 
@@ -554,3 +553,9 @@ The enum implementation - with all the other variations you will find around - i
 
 The dyn trait implementation was my first attempt to implement a state machine by using traits instead of enums. The only benefit it provides over the enum implementation is decoupling the States from each other, so you don't have a [potentially huge] match statement with all the states and transitions. But overall, I think I wouldn't use that implementation at all.
 
+<p>&nbsp; </p>
+{% box(title="") %}
+
+If you find any issues in the post, please open an issue in the github repo.
+
+{% end %}

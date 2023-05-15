@@ -2,7 +2,7 @@
 base_url = "https://balliegojr.github.io"
 title = "balliegojr"
 taxonomies = [
-    {name = "tags"},
+    {name = "tags", feed=true},
 ]
 
 generate_feed = true
@@ -10,6 +10,7 @@ feed_filename = "rss.xml"
 
 # Whether to automatically compile all Sass files in the sass directory
 compile_sass = true
+show_reading_time = true
 
 # Whether to build a search index to be used later on by a JavaScript library
 build_search_index = false
@@ -26,13 +27,13 @@ smart_punctuation = true
 author = "Ilson Balliego"
 logo_text = "balliegojr"
 page_titles = "combined"
-accent_color = "blue"
+accent_color = "green"
 background_color = "dark"
 
 
 menu_items = [
     {name = "blog", url = "$BASE_URL"},
-    # {name = "tags", url = "$BASE_URL/tags"},
+    {name = "tags", url = "$BASE_URL/tags"},
     # {name = "archive", url = "$BASE_URL/archive"},
     {name = "about me", url = "$BASE_URL/about"},
     {name = "source", url = "https://github.com/balliegojr/blog", newtab = true},

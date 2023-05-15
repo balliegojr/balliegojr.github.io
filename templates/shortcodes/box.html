@@ -1,0 +1,9 @@
+<fieldset>
+    {% if title %}
+        <legend>{{title}}</legend>
+    {% endif %}
+
+    {% if body %}
+        {{ body | markdown(inline=true) | safe }}
+    {% endif %}
+</fieldset>

@@ -1,0 +1,5 @@
+{% extends "terminimal/templates/index.html" %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{{ get_url(path="blog_style.css", trailing_slash=false) | safe }}">
+{% endblock %}
+
