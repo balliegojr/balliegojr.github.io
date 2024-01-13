@@ -1,9 +1,7 @@
 # The URL the site will be built for
 base_url = "https://balliegojr.github.io"
 title = "balliegojr"
-taxonomies = [
-    {name = "tags", feed=true},
-]
+taxonomies = [{ name = "tags", feed = true }]
 
 generate_feed = true
 feed_filename = "rss.xml"
@@ -11,11 +9,9 @@ ignored_content = ["**/code/**"]
 
 # Whether to automatically compile all Sass files in the sass directory
 compile_sass = true
-show_reading_time = true
 
 # Whether to build a search index to be used later on by a JavaScript library
 build_search_index = false
-theme = "terminimal"
 [markdown]
 # Whether to do syntax highlighting
 # Theme can be customised by setting the `highlight_theme` variable to a theme supported by Zola
@@ -30,15 +26,13 @@ logo_text = "balliegojr"
 page_titles = "combined"
 accent_color = "green"
 background_color = "dark"
-
+post_view_navigation_prompt = "Thanks for reading! Read other posts?"
+enable_post_view_navigation = true
 
 menu_items = [
-    {name = "blog", url = "$BASE_URL"},
-    {name = "tags", url = "$BASE_URL/tags"},
+    { name = "blog", url = "$BASE_URL" },
+    { name = "tags", url = "$BASE_URL/tags" },
     # {name = "archive", url = "$BASE_URL/archive"},
-    {name = "about me", url = "$BASE_URL/about"},
-    {name = "source", url = "https://github.com/balliegojr/blog", newtab = true},
+    { name = "about me", url = "$BASE_URL/about" },
+    { name = "source", url = "https://github.com/balliegojr/blog", newtab = true },
 ]
-
-enable_post_view_navigation = true
-show_reading_time = true
