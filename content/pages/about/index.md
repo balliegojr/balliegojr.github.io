@@ -15,15 +15,20 @@ hide_page_meta = true
     </a>
 </div>
 
-I Write code, usually in Rust, and sometimes it works…
+I Write code, usually in Rust, and I have lots of fun in the process.
 ---
 I have been writing code for a long time now, long enough to write a decade and put plus after it (10+ years).
 
-My first years started with .NET, at the time I was young and naive and I had an MS coffee mug and a pillow cover - ok, I actually didn’t have that stuff, but I had a very strong belief that C# and MSDN were the best things in the world. Nothing like everything being controlled by a single giant corp. But to be fair, C# is a pretty decent language.
+My journey started with .NET, at the time I was young and naive and I had an MS coffee mug and a pillow cover - ok, I actually didn’t have that stuff, but I had a very strong belief that C# was the best language in the world. Even though I liked C# quite a lot, after a few years I decided it was time to learn something new. 
 
-Then I discovered JS and Python and the wonderful world of open source and started to use Linux, grew a beard - and a belly, but that was due to long night hours at work with nothing but pizza and McDonald's as food. After around four years of getting shot in the foot because JS is such a well-designed and bug-free language, I decided it was time to move on.
+I already had some knowledge of JS, and I kept moving more and more toward FE development, AngularJS and Grunt used to be cutting-edge back then. NodeJS was quite attractive due to the JavaScript everywhere mentality and it didn't take long for me to start using it. 
 
-It was time to look for something else. I have tried elixir for a while, I was deeply in love with its functional approach and the fairly sane syntax, but almost nobody uses elixir - and a man needs to eat - so it wasn’t a good choice for a main language. In my search for something new, for a brief moment of insanity, I turned my eyes toward Go, and it took me two days to realize that I hated it.
+Around the same time, I started to toy around with Python, which brought me even closer to the open-source world.
 
-It was then that I first came across one of the “We re-wrote it in Rust and it is blazingly fast” blog posts. And I was bit by the crab. I haven’t looked for anything else since then.
+With every new language, my horizons expanded even more. I always felt it was amazing to learn new concepts and how learning more languages can help to draw a parallel and make it a lot easier to learn a new concept. 
 
+Time went by and I started to use Linux, I also grew a beard - and a belly, but that was due to long night hours at work with nothing but pizza and McDonald's as food. After around four years of getting shot in the foot with dynamic languages, I decided it was time to move on.
+
+I have tried elixir for a while, I was deeply in love with its functional approach and the fairly sane syntax, but almost nobody uses elixir - and a man needs to eat - so it wasn’t a good choice for a main language. In my search for something new, I turned my eyes toward Go, but I felt it was too much like JS, albeit without the same foot guns, 
+
+It was then that I first came across one of the “We re-wrote it in Rust, and it is blazingly fast” blog posts. And I was bit by the crab. I haven’t looked for anything else since then.
