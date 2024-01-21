@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Traits for beginners | balliegojr</title>
+    
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    <meta name="robots" content="noodp"/>
+
+    <link rel="stylesheet" href="https://balliegojr.github.io/style.css">
+    <link rel="stylesheet" href="https://balliegojr.github.io/color/green.css">
+
+        <link rel="stylesheet" href="https://balliegojr.github.io/color/background_dark.css">
+    
+    <link rel="stylesheet" href="https://balliegojr.github.io/font-hack-subset.css">
+
+    <meta name="description" content="This post is for those who are starting their journey with coding and Rust, it is an introduction to traits, and I will try to explain what are traits and how to use them.">
+
+    <meta property="og:description" content="This post is for those who are starting their journey with coding and Rust, it is an introduction to traits, and I will try to explain what are traits and how to use them.">
+    <meta property="og:title" content="Traits for beginners | balliegojr">
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="https://balliegojr.github.io/traits-for-beginners/">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:description" content="This post is for those who are starting their journey with coding and Rust, it is an introduction to traits, and I will try to explain what are traits and how to use them.">
+    <meta name="twitter:title" content="Traits for beginners | balliegojr">
+    <meta property="twitter:domain" content="balliegojr.github.io">
+    <meta property="twitter:url" content="https://balliegojr.github.io/traits-for-beginners/">
+
+            <link rel="alternate" type="application/rss+xml" title="RSS" href="https://balliegojr.github.io/rss.xml">
+    <link rel="stylesheet" href="https://balliegojr.github.io/blog_style.css">
+
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true });
+  </script>
+</head>
+
+<body class="">
+<div class="container">
+    
+    <header class="header">
+        <div class="header__inner">
+            <div class="header__logo">
+                    
+                <a href="https://balliegojr.github.io" style="text-decoration: none;">
+                    <div class="logo">
+                      
+                            balliegojr
+                        
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        
+        
+                <nav class="menu">
+            <ul class="menu__inner">
+                <li class="active"><a href="https://balliegojr.github.io">blog</a></li>
+            
+                <li><a href="https://balliegojr.github.io/tags">tags</a></li>
+            
+                <li><a href="https://balliegojr.github.io/about">about me</a></li>
+            
+                <li><a href="https://github.com/balliegojr/blog" target="_blank" rel="noopener noreferrer">source</a></li>
+            </ul>
+        </nav>
+    
+    
+        
+    </header>
+    
+
+    <div class="content">
+        
+    <div class="post">
+        
+    <h1 class="post-title"><a href="https://balliegojr.github.io/traits-for-beginners/">Traits for beginners</a></h1>
+    <div class="post-meta-inline">
+        
+    <span class="post-date">
+            2024-01-07
+        </span>
+
+    </div>
+
+    
+        <span class="post-tags-inline">
+                :: tags:&nbsp;
+                <a class="post-tag" href="https://balliegojr.github.io/tags/rust/">#rust</a>&nbsp;
+                <a class="post-tag" href="https://balliegojr.github.io/tags/traits/">#traits</a></span>
+    
+
+        <div class="post-content">
+            <p>This post is for those who are starting their journey with coding and Rust, it is an introduction to traits, and I will try to explain what are traits and how to use them.</p>
+<span id="continue-reading"></span>
+<p>My goal is to try to shed some light on how one can use traits to write code that is simpler to understand and maintain. </p>
+<p>We are going to implement network encryption using <a href="https://crates.io/crates/chacha20poly1305">chacha20poly1305</a>. First, we will implement it without traits. Then, we will refactor it to use traits and see how much better the code will be.</p>
+<p>I am assuming you have some familiarity with Rust basics, the <a href="https://doc.rust-lang.org/book/ch01-00-getting-started.html">book</a> is a great place to start if you don’t.</p>
+<p>A full async implemenation of the encryption and encryption traits can be found on my <a href="https://github.com/balliegojr/async-encrypted-stream">async-encrypted-stream</a> Github repo.</p>
+<fieldset>
+    
+        <legend>Encryption</legend>
+    
+
+    
+        You can read about encryption on <a href="https://en.wikipedia.org/wiki/Encryption">Wikipedia</a>, but a short and naive description is “use this key to scramble this information”. If you want to see the information, you need the key to unscramble it. </p>
+<p>If you are going to use the same key to encrypt different pieces of data, it is a good idea to add some “noise” to prevent people from deducing the key.</p>
+<p>Stream encryption algorithms add noise to the key (known as salt) and to each piece of information being encrypted (known as <strong>nonce</strong>)
+    
+</fieldset>
+<h1 id="reading-and-sending-the-data">Reading and Sending the data</h1>
+<p>As a first step, it is necessary to build the basics to send and receive the data. Due to the goal of this post, the code will not be async, because this would lead to unnecessary complexity.</p>
+<p>The code will be a simple implementation that connects to a host and encrypts all the information exchanged. I will split the execution flow into “reading” and “writing” threads. The reading part will wait for messages from the network and write them to an internal channel. The writing part will wait for messages from an internal channel and then send them to the network.</p>
+<p>The code below contains comments explaining each section.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span>
+</span><span style="color:#65737e;">// Imports all the necessary types from the standard library.
+</span><span style="color:#65737e;">// This is important mostly for the traits
+</span><span style="color:#b48ead;">use </span><span>std::{
+</span><span>    error::Error,
+</span><span>    io::{Read, Write},
+</span><span>    net::TcpStream,
+</span><span>    sync::{
+</span><span>        mpsc::{Receiver, Sender},
+</span><span>        Arc,
+</span><span>    },
+</span><span>    thread,
+</span><span>};
+</span><span>
+</span><span style="color:#65737e;">// Message types to avoid confusion with the channels
+</span><span style="color:#b48ead;">pub struct </span><span>InboundMessage(Vec&lt;</span><span style="color:#b48ead;">u8</span><span>&gt;);
+</span><span style="color:#b48ead;">pub struct </span><span>OutboundMessage(Vec&lt;</span><span style="color:#b48ead;">u8</span><span>&gt;);
+</span><span>
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">connect_to_host</span><span>(
+</span><span>    </span><span style="color:#bf616a;">addr</span><span>: &amp;</span><span style="color:#b48ead;">str</span><span>,
+</span><span>) -&gt; (Sender&lt;OutboundMessage&gt;, Receiver&lt;InboundMessage&gt;) {
+</span><span>    </span><span style="color:#65737e;">// Creates a TcpStream by connecting to a host and 
+</span><span>    </span><span style="color:#65737e;">// wraps it an Arc to share between two threads
+</span><span>    </span><span style="color:#b48ead;">let</span><span> stream = Arc::new(TcpStream::connect(addr).</span><span style="color:#96b5b4;">expect</span><span>(&quot;</span><span style="color:#a3be8c;">Failed to connect</span><span>&quot;));
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">let</span><span> inbound_channel = </span><span style="color:#96b5b4;">receive_data</span><span>(stream.</span><span style="color:#96b5b4;">clone</span><span>());
+</span><span>    </span><span style="color:#b48ead;">let</span><span> outbound_channel = </span><span style="color:#96b5b4;">send_data</span><span>(stream);
+</span><span>
+</span><span>    (outbound_channel, inbound_channel)
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">send_data</span><span>(</span><span style="color:#bf616a;">stream</span><span>: Arc&lt;TcpStream&gt;) -&gt; Sender&lt;OutboundMessage&gt; {
+</span><span>    </span><span style="color:#65737e;">// Spawn a thread that will read some bytes from the channel
+</span><span>    </span><span style="color:#65737e;">// and send to the stream
+</span><span>    </span><span style="color:#b48ead;">let </span><span>(tx, rx) = std::sync::mpsc::channel();
+</span><span>    thread::spawn(</span><span style="color:#b48ead;">move </span><span>|| {
+</span><span>        </span><span style="color:#b48ead;">let</span><span> stream = &amp;*stream;
+</span><span>        </span><span style="color:#b48ead;">while let </span><span>Ok(OutboundMessage(bytes)) = rx.</span><span style="color:#96b5b4;">recv</span><span>() {
+</span><span>            </span><span style="color:#b48ead;">if</span><span> stream.</span><span style="color:#96b5b4;">write_all</span><span>(&amp;bytes).</span><span style="color:#96b5b4;">is_err</span><span>() {
+</span><span>                </span><span style="color:#b48ead;">break</span><span>;
+</span><span>            }
+</span><span>        }
+</span><span>    });
+</span><span>
+</span><span>    tx
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">receive_data</span><span>(</span><span style="color:#bf616a;">stream</span><span>: Arc&lt;TcpStream&gt;) -&gt; Receiver&lt;InboundMessage&gt; {
+</span><span>    </span><span style="color:#65737e;">// Spawn a thread that will read some bytes from the network 
+</span><span>    </span><span style="color:#65737e;">// and send to a channel
+</span><span>    </span><span style="color:#b48ead;">let </span><span>(tx, rx) = std::sync::mpsc::channel();
+</span><span>    thread::spawn(</span><span style="color:#b48ead;">move </span><span>|| {
+</span><span>        </span><span style="color:#b48ead;">let</span><span> stream = &amp;*stream;
+</span><span>        </span><span style="color:#b48ead;">let mut</span><span> buf = [</span><span style="color:#d08770;">0</span><span style="color:#b48ead;">u8</span><span>; </span><span style="color:#d08770;">4096</span><span>];
+</span><span>        </span><span style="color:#b48ead;">while let </span><span>Ok(n) = stream.</span><span style="color:#96b5b4;">read</span><span>(&amp;</span><span style="color:#b48ead;">mut</span><span> buf) {
+</span><span>            </span><span style="color:#b48ead;">if</span><span> n == </span><span style="color:#d08770;">0 </span><span>{
+</span><span>                </span><span style="color:#b48ead;">break</span><span>;
+</span><span>            }
+</span><span>
+</span><span>            </span><span style="color:#b48ead;">if</span><span> tx.</span><span style="color:#96b5b4;">send</span><span>(InboundMessage(buf[..n].</span><span style="color:#96b5b4;">to_vec</span><span>())).</span><span style="color:#96b5b4;">is_err</span><span>() {
+</span><span>                </span><span style="color:#b48ead;">break</span><span>;
+</span><span>            }
+</span><span>        }
+</span><span>    });
+</span><span>
+</span><span>    rx
+</span><span>}
+</span></code></pre>
+<p>The most important part in the code above is the <code>read</code> call, <strong>it populates the given buffer and returns the number of bytes read from the network</strong>, this is ok for now. </p>
+<h1 id="adding-encryption">Adding encryption</h1>
+<p>With the basics in place, it is time to add encryption. For that, it is necessary to add a new dependency in the Cargo.toml file.</p>
+<pre data-lang="toml" style="background-color:#2b303b;color:#c0c5ce;" class="language-toml "><code class="language-toml" data-lang="toml"><span>[dependencies]
+</span><span style="color:#bf616a;">chacha20poly1305 </span><span>= { </span><span style="color:#bf616a;">version </span><span>= &quot;</span><span style="color:#a3be8c;">0.10.1</span><span>&quot;, </span><span style="color:#bf616a;">features </span><span>= [&quot;</span><span style="color:#a3be8c;">stream</span><span>&quot;, &quot;</span><span style="color:#a3be8c;">std</span><span>&quot;] }
+</span></code></pre>
+<p>With the new dependency added, now it is time to create the encryptor and decryptor structs.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">use </span><span>chacha20poly1305::{
+</span><span>    aead::{
+</span><span>        stream::{DecryptorLE31, EncryptorLE31},
+</span><span>        KeyInit,
+</span><span>    },
+</span><span>    XChaCha20Poly1305,
+</span><span>};
+</span><span>
+</span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">get_encryptor_and_decryptor</span><span>(
+</span><span>    </span><span style="color:#bf616a;">key</span><span>: [</span><span style="color:#b48ead;">u8</span><span>; 32],
+</span><span>    </span><span style="color:#bf616a;">nonce</span><span>: [</span><span style="color:#b48ead;">u8</span><span>; 20],
+</span><span>) -&gt; (
+</span><span>    EncryptorLE31&lt;XChaCha20Poly1305&gt;,
+</span><span>    DecryptorLE31&lt;XChaCha20Poly1305&gt;,
+</span><span>) {
+</span><span>    </span><span style="color:#65737e;">// Creates the encryptor and decryptor pair with provided key and nonce.
+</span><span>    </span><span style="color:#b48ead;">let</span><span> encryptor: EncryptorLE31&lt;XChaCha20Poly1305&gt; =
+</span><span>        chacha20poly1305::aead::stream::EncryptorLE31::from_aead(
+</span><span>            XChaCha20Poly1305::new(key.</span><span style="color:#96b5b4;">as_ref</span><span>().</span><span style="color:#96b5b4;">into</span><span>()),
+</span><span>            nonce.</span><span style="color:#96b5b4;">as_ref</span><span>().</span><span style="color:#96b5b4;">into</span><span>(),
+</span><span>        );
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">let</span><span> decryptor: DecryptorLE31&lt;XChaCha20Poly1305&gt; =
+</span><span>        chacha20poly1305::aead::stream::DecryptorLE31::from_aead(
+</span><span>            XChaCha20Poly1305::new(key.</span><span style="color:#96b5b4;">as_ref</span><span>().</span><span style="color:#96b5b4;">into</span><span>()),
+</span><span>            nonce.</span><span style="color:#96b5b4;">as_ref</span><span>().</span><span style="color:#96b5b4;">into</span><span>(),
+</span><span>        );
+</span><span>
+</span><span>    (encryptor, decryptor)
+</span><span>}
+</span></code></pre>
+<p>Now that we know how to get the encryptor and decryptor, it is time to change the <code>send_data</code> and <code>receive_data</code> to use them to apply encryption to the data. Luckily, the encryption crate is very easy to use, we just need to call <code>encrypt_next</code> and <code>decrypt_next</code>.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">send_data</span><span>(
+</span><span>    </span><span style="color:#bf616a;">stream</span><span>: Arc&lt;TcpStream&gt;,
+</span><span>    </span><span style="color:#65737e;">// receives the encryptor as a parameter.
+</span><span>    </span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">encryptor</span><span>: EncryptorLE31&lt;XChaCha20Poly1305&gt;, 
+</span><span>    </span><span style="color:#65737e;">// flag to enable encryption.
+</span><span>    </span><span style="color:#bf616a;">encryption_enabled</span><span>: </span><span style="color:#b48ead;">bool</span><span>, 
+</span><span>) -&gt; Sender&lt;OutboundMessage&gt; {
+</span><span>    </span><span style="color:#b48ead;">let </span><span>(tx, rx) = std::sync::mpsc::channel();
+</span><span>    thread::spawn(</span><span style="color:#b48ead;">move </span><span>|| {
+</span><span>        </span><span style="color:#b48ead;">let</span><span> stream = &amp;*stream;
+</span><span>        </span><span style="color:#b48ead;">while let </span><span>Ok(OutboundMessage(bytes)) = rx.</span><span style="color:#96b5b4;">recv</span><span>() {
+</span><span>            </span><span style="color:#b48ead;">if</span><span> encryption_enabled {
+</span><span>                </span><span style="color:#65737e;">// if encryption is enabled, encrypts the whole message 
+</span><span>                </span><span style="color:#65737e;">// and send the encrypted result to the tcp stream
+</span><span>                </span><span style="color:#b48ead;">let </span><span>Ok(encrypted) = encryptor.</span><span style="color:#96b5b4;">encrypt_next</span><span>(&amp;bytes[..]) </span><span style="color:#b48ead;">else </span><span>{ 
+</span><span>                    </span><span style="color:#b48ead;">break</span><span>; 
+</span><span>                };
+</span><span>                </span><span style="color:#b48ead;">if</span><span> stream.</span><span style="color:#96b5b4;">write_all</span><span>(&amp;encrypted).</span><span style="color:#96b5b4;">is_err</span><span>() {
+</span><span>                    </span><span style="color:#b48ead;">break</span><span>;
+</span><span>                }
+</span><span>            } </span><span style="color:#b48ead;">else if</span><span> stream.</span><span style="color:#96b5b4;">write_all</span><span>(&amp;bytes).</span><span style="color:#96b5b4;">is_err</span><span>() {
+</span><span>                </span><span style="color:#b48ead;">break</span><span>;
+</span><span>            }
+</span><span>        }
+</span><span>    });
+</span><span>
+</span><span>    tx
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">receive_data</span><span>(
+</span><span>    </span><span style="color:#bf616a;">stream</span><span>: Arc&lt;TcpStream&gt;,
+</span><span>    </span><span style="color:#65737e;">// receives the decryptor as a parameter.
+</span><span>    </span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">decryptor</span><span>: DecryptorLE31&lt;XChaCha20Poly1305&gt;, 
+</span><span>    </span><span style="color:#65737e;">// flag to enable encryption.
+</span><span>    </span><span style="color:#bf616a;">encryption_enabled</span><span>: </span><span style="color:#b48ead;">bool</span><span>, 
+</span><span>) -&gt; Receiver&lt;InboundMessage&gt; {
+</span><span>    </span><span style="color:#b48ead;">let </span><span>(tx, rx) = std::sync::mpsc::channel();
+</span><span>
+</span><span>    thread::spawn(</span><span style="color:#b48ead;">move </span><span>|| {
+</span><span>        </span><span style="color:#b48ead;">let</span><span> stream = &amp;*stream;
+</span><span>        </span><span style="color:#b48ead;">let mut</span><span> buf = [</span><span style="color:#d08770;">0</span><span style="color:#b48ead;">u8</span><span>; </span><span style="color:#d08770;">4096</span><span>];
+</span><span>        </span><span style="color:#b48ead;">while let </span><span>Ok(n) = stream.</span><span style="color:#96b5b4;">read</span><span>(&amp;</span><span style="color:#b48ead;">mut</span><span> buf) {
+</span><span>            </span><span style="color:#b48ead;">if</span><span> n == </span><span style="color:#d08770;">0 </span><span>{
+</span><span>                </span><span style="color:#b48ead;">break</span><span>;
+</span><span>            }
+</span><span>
+</span><span>            </span><span style="color:#b48ead;">if</span><span> tx.</span><span style="color:#96b5b4;">send</span><span>(InboundMessage(buf[..n].</span><span style="color:#96b5b4;">to_vec</span><span>())).</span><span style="color:#96b5b4;">is_err</span><span>() {
+</span><span>                </span><span style="color:#b48ead;">break</span><span>;
+</span><span>            }
+</span><span>
+</span><span>            </span><span style="color:#b48ead;">if</span><span> encryption_enabled {
+</span><span>                </span><span style="color:#65737e;">// If encryption is enabled, decrypt what came 
+</span><span>                </span><span style="color:#65737e;">// from the stream and send to the channel
+</span><span>                </span><span style="color:#b48ead;">let </span><span>Ok(decrypted) = decryptor.</span><span style="color:#96b5b4;">decrypt_next</span><span>(&amp;buf[..n]) </span><span style="color:#b48ead;">else </span><span>{ 
+</span><span>                    </span><span style="color:#b48ead;">break</span><span>; 
+</span><span>                };
+</span><span>                </span><span style="color:#b48ead;">if</span><span> tx.</span><span style="color:#96b5b4;">send</span><span>(InboundMessage(decrypted)).</span><span style="color:#96b5b4;">is_err</span><span>() {
+</span><span>                    </span><span style="color:#b48ead;">break</span><span>;
+</span><span>                }
+</span><span>            } </span><span style="color:#b48ead;">else if</span><span> tx.</span><span style="color:#96b5b4;">send</span><span>(InboundMessage(buf[..n].</span><span style="color:#96b5b4;">to_vec</span><span>())).</span><span style="color:#96b5b4;">is_err</span><span>() {
+</span><span>                </span><span style="color:#b48ead;">break</span><span>;
+</span><span>            }
+</span><span>        }
+</span><span>    });
+</span><span>
+</span><span>    rx
+</span><span>}
+</span><span>
+</span></code></pre>
+<p>Both functions <code>send_data</code> and <code>receive_data</code> were changed to optionally use encryption over the stream.</p>
+<p>Amazing, another well done job! Everything works fine! It is time to pack the bag and go home. Except, it doesn’t work! I mean, the code would work fine with a simple “hello” message. The data would be encrypted, sent over the wire, and decrypted on the other side. However, the code has a fundamental flaw.</p>
+<p>The issue is that the <code>encrypt_next</code> and <code>decrypt_next</code> calls must be equal on both ends. For each call to <code>encrypt_next</code>, <code>decrypt_next</code> must be called exactly once, because the <strong>nonce</strong> value changes every time it is used.</p>
+<p>Imagine a message of 100 bytes. After encryption, the message will be longer, the exact size will depend on the encryption used, but let’s say it is 120 bytes. When <code>read</code> is called on the other side, it will read what is available in the buffer, which may or may not be 120 bytes. The function <code>decrypt_next</code> must be called with the same data generated by <code>encrypt_next</code>. </p>
+<p>To solve this issue, it is necessary to know exactly how many bytes must be sent to the next <code>decrypt_next</code> call. This can be done by sending the length of the message before sending the message itself.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">send_data</span><span>(
+</span><span>    </span><span style="color:#bf616a;">stream</span><span>: Arc&lt;TcpStream&gt;,
+</span><span>    </span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">encryptor</span><span>: EncryptorLE31&lt;XChaCha20Poly1305&gt;,
+</span><span>    </span><span style="color:#bf616a;">encryption_enabled</span><span>: </span><span style="color:#b48ead;">bool</span><span>,
+</span><span>) -&gt; Sender&lt;OutboundMessage&gt; {
+</span><span>    </span><span style="color:#b48ead;">let </span><span>(tx, rx) = std::sync::mpsc::channel();
+</span><span>    thread::spawn(</span><span style="color:#b48ead;">move </span><span>|| {
+</span><span>        </span><span style="color:#b48ead;">let</span><span> stream =  &amp;*stream;
+</span><span>        </span><span style="color:#b48ead;">while let </span><span>Ok(OutboundMessage(bytes)) = rx.</span><span style="color:#96b5b4;">recv</span><span>() {
+</span><span>            </span><span style="color:#b48ead;">if</span><span> encryption_enabled {
+</span><span>                </span><span style="color:#b48ead;">let </span><span>Ok(encrypted) = encryptor.</span><span style="color:#96b5b4;">encrypt_next</span><span>(&amp;bytes[..]) </span><span style="color:#b48ead;">else </span><span>{ 
+</span><span>                    </span><span style="color:#b48ead;">break</span><span>; 
+</span><span>                };
+</span><span>
+</span><span>                </span><span style="color:#65737e;">// Get the size of the message and send to the stream.
+</span><span>                </span><span style="color:#65737e;">// This is the only necessary change.
+</span><span>                </span><span style="color:#b48ead;">let</span><span> size = (encrypted.</span><span style="color:#96b5b4;">len</span><span>() as </span><span style="color:#b48ead;">u16</span><span>).</span><span style="color:#96b5b4;">to_be_bytes</span><span>();
+</span><span>                </span><span style="color:#b48ead;">if</span><span> stream.</span><span style="color:#96b5b4;">write_all</span><span>(&amp;size).</span><span style="color:#96b5b4;">is_err</span><span>() {
+</span><span>                    </span><span style="color:#b48ead;">break</span><span>;
+</span><span>                }
+</span><span>                
+</span><span>                </span><span style="color:#b48ead;">if</span><span> stream.</span><span style="color:#96b5b4;">write_all</span><span>(&amp;encrypted).</span><span style="color:#96b5b4;">is_err</span><span>() {
+</span><span>                    </span><span style="color:#b48ead;">break</span><span>;
+</span><span>                }
+</span><span>            } </span><span style="color:#b48ead;">else </span><span>{
+</span><span>                </span><span style="color:#65737e;">// Get the size of the message and send to the stream.
+</span><span>                </span><span style="color:#65737e;">// This is the only necessary change.
+</span><span>                </span><span style="color:#b48ead;">let</span><span> size = (bytes.</span><span style="color:#96b5b4;">len</span><span>() as </span><span style="color:#b48ead;">u16</span><span>).</span><span style="color:#96b5b4;">to_be_bytes</span><span>();
+</span><span>                </span><span style="color:#b48ead;">if</span><span> stream.</span><span style="color:#96b5b4;">write_all</span><span>(&amp;size).</span><span style="color:#96b5b4;">is_err</span><span>() {
+</span><span>                    </span><span style="color:#b48ead;">break</span><span>;
+</span><span>                }
+</span><span>
+</span><span>                </span><span style="color:#b48ead;">if</span><span> stream.</span><span style="color:#96b5b4;">write_all</span><span>(&amp;bytes).</span><span style="color:#96b5b4;">is_err</span><span>() {
+</span><span>                    </span><span style="color:#b48ead;">break</span><span>;
+</span><span>                }
+</span><span>            }
+</span><span>        }
+</span><span>    });
+</span><span>
+</span><span>    tx
+</span><span>}
+</span><span>
+</span></code></pre>
+<p>Sending is the easiest part. Just get the length of the message, cast it to a bytes array, and write it to the stream before the actual data. </p>
+<p>Just a few observations before we proceed:</p>
+<ul>
+<li>Never use <code>usize</code> when sending binary data over the network. Different architectures may have different <code>usize</code> sizes. It is better to be explicit here. </li>
+<li>16 bits is a good size for most scenarios, but it may be necessary to use a bigger value if you need to deal with very big data.</li>
+<li><code>to_be_bytes()</code> returns the <strong>big endian</strong> bytes representation of the number</li>
+<li>Calling <code>write_all</code> multiple times without buffering will result in poor performance. </li>
+</ul>
+<p>Welcome to network programming!</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">receive_data</span><span>(</span><span style="color:#bf616a;">stream</span><span>: Arc&lt;TcpStream&gt;,
+</span><span>    </span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">decryptor</span><span>: DecryptorLE31&lt;XChaCha20Poly1305&gt;,
+</span><span>    </span><span style="color:#bf616a;">encryption_enabled</span><span>: </span><span style="color:#b48ead;">bool</span><span>,
+</span><span>) -&gt; Receiver&lt;InboundMessage&gt; {
+</span><span>    </span><span style="color:#b48ead;">let </span><span>(tx, rx) = std::sync::mpsc::channel();
+</span><span>
+</span><span>    thread::spawn(</span><span style="color:#b48ead;">move </span><span>|| {
+</span><span>        </span><span style="color:#b48ead;">let</span><span> stream = &amp;*stream;
+</span><span>
+</span><span>        </span><span style="color:#b48ead;">let mut</span><span> buf = vec![</span><span style="color:#d08770;">0</span><span style="color:#b48ead;">u8</span><span>; </span><span style="color:#d08770;">4096</span><span>];
+</span><span>        </span><span style="color:#65737e;">// Keep track of how many bytes across multiple reads
+</span><span>        </span><span style="color:#b48ead;">let mut</span><span> position = </span><span style="color:#d08770;">0</span><span>;
+</span><span>        </span><span style="color:#b48ead;">while let </span><span>Ok(n) = stream.</span><span style="color:#96b5b4;">read</span><span>(&amp;</span><span style="color:#b48ead;">mut</span><span> buf[position..]) {
+</span><span>            </span><span style="color:#b48ead;">if</span><span> n == </span><span style="color:#d08770;">0 </span><span>{
+</span><span>                </span><span style="color:#b48ead;">break</span><span>;
+</span><span>            }
+</span><span>            </span><span style="color:#65737e;">// Move the position to account for the new data.
+</span><span>            position += n;
+</span><span>
+</span><span>            </span><span style="color:#65737e;">// buf may have enough data for multiple messages
+</span><span>            </span><span style="color:#65737e;">// we are going to try to process everything.
+</span><span>            </span><span style="color:#b48ead;">loop </span><span>{
+</span><span>                </span><span style="color:#65737e;">// Since the length is u16, we need at least 2 bytes.
+</span><span>                </span><span style="color:#b48ead;">if</span><span> position &lt; </span><span style="color:#d08770;">2 </span><span>{
+</span><span>                    </span><span style="color:#b48ead;">break</span><span>;
+</span><span>                }
+</span><span>
+</span><span>                </span><span style="color:#65737e;">// Read the first 2 bytes to get the length of the message
+</span><span>                </span><span style="color:#b48ead;">let</span><span> length_bytes = [buf[</span><span style="color:#d08770;">0</span><span>], buf[</span><span style="color:#d08770;">1</span><span>]];
+</span><span>                </span><span style="color:#b48ead;">let</span><span> end = </span><span style="color:#b48ead;">u16</span><span>::from_be_bytes(length_bytes) as </span><span style="color:#b48ead;">usize </span><span>+ </span><span style="color:#d08770;">2</span><span>;
+</span><span>
+</span><span>                </span><span style="color:#65737e;">// Verify if the whole message is in the buffer.
+</span><span>                </span><span style="color:#b48ead;">if</span><span> position &lt; end {
+</span><span>                    </span><span style="color:#b48ead;">break</span><span>;
+</span><span>                }
+</span><span>
+</span><span>                </span><span style="color:#b48ead;">let</span><span> payload = &amp;buf[</span><span style="color:#d08770;">2</span><span>..end];
+</span><span>                </span><span style="color:#b48ead;">if</span><span> encryption_enabled {
+</span><span>                    </span><span style="color:#b48ead;">let </span><span>Ok(decrypted) = decryptor.</span><span style="color:#96b5b4;">decrypt_next</span><span>(payload) </span><span style="color:#b48ead;">else </span><span>{ 
+</span><span>                        </span><span style="color:#b48ead;">break</span><span>; 
+</span><span>                    };
+</span><span>                    </span><span style="color:#b48ead;">if</span><span> tx.</span><span style="color:#96b5b4;">send</span><span>(InboundMessage(decrypted)).</span><span style="color:#96b5b4;">is_err</span><span>() {
+</span><span>                        </span><span style="color:#b48ead;">break</span><span>;
+</span><span>                    }
+</span><span>                } </span><span style="color:#b48ead;">else if</span><span> tx.</span><span style="color:#96b5b4;">send</span><span>(InboundMessage(payload.</span><span style="color:#96b5b4;">to_vec</span><span>())).</span><span style="color:#96b5b4;">is_err</span><span>() {
+</span><span>                    </span><span style="color:#b48ead;">break</span><span>;
+</span><span>                }
+</span><span>
+</span><span>                </span><span style="color:#65737e;">// Shift the contents of the buffer to the start
+</span><span>                </span><span style="color:#b48ead;">if</span><span> position &gt; end {
+</span><span>                    buf.</span><span style="color:#96b5b4;">copy_within</span><span>(end..position, </span><span style="color:#d08770;">0</span><span>);
+</span><span>                    position -= end;
+</span><span>                } </span><span style="color:#b48ead;">else </span><span>{
+</span><span>                    position = </span><span style="color:#d08770;">0</span><span>;
+</span><span>                }
+</span><span>            }
+</span><span>        }
+</span><span>    });
+</span><span>
+</span><span>    rx
+</span><span>}
+</span><span>
+</span></code></pre>
+<p>With the changes in place, the decryption should work, but the code is becoming complex and error-prone, and it has huge limitations.</p>
+<p>Two bugs are present in the current implementation.</p>
+<ul>
+<li>The code fails if a message is longer than 4094 bytes. The solution for this is to use a dynamic-sized buffer.</li>
+<li>If decryption fails, <code>receive_data</code> will loop without resetting the buffer position, leading to an infinite loop.</li>
+</ul>
+<p>On top of the bugs, the current approach mixes encrypted and plain communication in the same place, and also, extending this code is becoming hard due to the complexity. </p>
+<p>I also mentioned before that calling <code>write_all</code> repeatedly was a bad idea, let’s address that issue by using <a href="https://doc.rust-lang.org/std/io/struct.BufWriter.html">BufWriter</a>. </p>
+<p><code>BufWriter</code> is quite easy to use, we just need to pass the stream to it.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">send_data</span><span>(...) -&gt; Sender&lt;OutboundMessage&gt; {
+</span><span>    </span><span style="color:#65737e;">// ommited for brevity.
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">let</span><span> stream = &amp;*stream;
+</span><span>    </span><span style="color:#65737e;">// We just need to add this line to the code
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> stream = BufWriter::new(stream); 
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">while let </span><span>Ok(OutboundMessage(bytes)) = rx.</span><span style="color:#96b5b4;">recv</span><span>() {
+</span><span>       </span><span style="color:#65737e;">// ommited for brevity.
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>Neat. But how can the change be that simple? Is it not even necessary to change the rest of the code?</p>
+<p>The reason this works is because both <code>TcpStream</code> and <code>BufWriter</code> types implement a trait called <a href="https://doc.rust-lang.org/std/io/trait.Write.html">Write</a>, in fact, the function <code>write_all</code> is defined in the <code>Write</code> trait, not in the <code>TcpStream</code> struct. </p>
+<p>Now, it is time to talk about traits!</p>
+<h1 id="traits">Traits</h1>
+<p>What are traits anyway? </p>
+<p>The <a href="https://doc.rust-lang.org/book/ch10-02-traits.html">rust book</a> defines traits as <strong>a way to define shared behavior in an abstract way</strong>. A different way of defining a trait is <strong>a way to isolate an aspect of something</strong>, because when you work with a trait, you only care about a specific aspect of the whole. </p>
+<p>I will try to explain this with an analogy.</p>
+<fieldset>
+    
+        <legend>Analogy time</legend>
+    
+
+    
+        One day you wake up and feel the urge to drink coffee, you drag yourself to the nearest electronics store and explain your urge to the salesperson, the salesperson looks you in the eye and says “I have something that will solve all your problems”, he takes you to the coffee machines aisle, slaps the box of the most expensive machine and says “You can make so much coffee with this baby that you will never sleep again!!! Just plug it on the wall, and you are ready to go!”. So you buy the machine, take it home, and make the most wonderful coffee you will ever taste, and while you have the caffeine rush running through your veins, you think “I am really lucky that the electrician I hired 10 years ago predicted I was going to buy this exact machine, otherwise, I would not have coffee now!!!”</p>
+<p>Well, that electrician had no idea you would buy a coffee machine, so how does the machine work when you plug it into the wall? </p>
+<p>The reason the machine works is that the <strong>socket is an interface</strong> between the electrician’s work and the manufacturer’s work, the <strong>interface establishes a standard to be followed</strong> by both parties, and any equipment that shares that <strong>aspect</strong> will work.</p>
+<p>The socket defines how the machine and the electric energy interact with each other by isolating one single aspect of the machine. </p>
+<p>For the electrician, the socket means he doesn’t need to care about which appliance it is going to be used, he only needs to care about putting the correct wires in the wall.</p>
+<p>For the manufacturer, the socket means they don’t need to care about the electric wiring, they only need to care about producing the coffee machine.</p>
+<p>For you, the user, the socket means you only need to care about <strong>plugging</strong> things together. You <strong>do not need to know</strong>  the details about the wiring or about the coffee machine internals. But the most important part is that <strong>any coffee machine will work in this socket</strong>.</p>
+<p>One very important detail about isolating aspects is that sometimes the aspect misses important information, for instance, what is the current of a given socket? You can’t know the current just by looking at the socket, you need some extra information to know that, you need to know the specifics.
+    
+</fieldset>
+<p>Back to Rust, the <strong>Write</strong> trait is the “socket” from our analogy. When a type implements the Write trait, it gains the ability to be treated by its Write aspect, which creates the possibility of ignoring every other aspect of the struct. When the code sees a <code>Write</code> type, it doesn’t care where or how the data is written, it only cares that the type can write the data somewhere, be it a file, a network connection, or a memory buffer. </p>
+<h1 id="using-traits-in-the-code">Using Traits in the code</h1>
+<p>Now that we have an idea of what traits are, it is time to rewrite the code with traits to make it better. </p>
+<p>Let’s start with the plain text communication by implementing two structs, PlainReadHalf and PlainWriteHalf. The two structs will implement the <strong>Read</strong> and <strong>Write</strong> traits respectively.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">/// PlainReadHalf has an inner reader to read from
+</span><span style="color:#65737e;">/// This reads as &quot;inner can be of any type T as long as T implements Read&quot;
+</span><span style="color:#b48ead;">pub struct </span><span>PlainReadHalf&lt;T&gt; where T: Read {
+</span><span>    </span><span style="color:#bf616a;">inner</span><span>: T,
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl</span><span>&lt;T&gt; PlainReadHalf&lt;T&gt; </span><span style="color:#b48ead;">where</span><span> T: Read {
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">new</span><span>(</span><span style="color:#bf616a;">inner</span><span>: T) -&gt; </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>        </span><span style="color:#b48ead;">Self </span><span>{ inner }
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style="color:#65737e;">/// Implements Read for the struct PlainReadHalf&lt;T&gt;
+</span><span style="color:#b48ead;">impl</span><span>&lt;T&gt; Read </span><span style="color:#b48ead;">for </span><span>PlainReadHalf&lt;T&gt; </span><span style="color:#b48ead;">where</span><span> T: Read {
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">read</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>, </span><span style="color:#bf616a;">buf</span><span>: &amp;</span><span style="color:#b48ead;">mut</span><span> [</span><span style="color:#b48ead;">u8</span><span>]) -&gt; std::io::Result&lt;</span><span style="color:#b48ead;">usize</span><span>&gt; {
+</span><span>        </span><span style="color:#65737e;">// Reads exactly 2 bytes from the inner reader
+</span><span>        </span><span style="color:#b48ead;">let mut</span><span> len_buf = [</span><span style="color:#d08770;">0</span><span style="color:#b48ead;">u8</span><span>; </span><span style="color:#d08770;">2</span><span>];
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.inner.</span><span style="color:#96b5b4;">read_exact</span><span>(&amp;</span><span style="color:#b48ead;">mut</span><span> len_buf)?;
+</span><span>        </span><span style="color:#b48ead;">let</span><span> len = </span><span style="color:#b48ead;">u16</span><span>::from_be_bytes(len_buf) as </span><span style="color:#b48ead;">usize</span><span>;
+</span><span>
+</span><span>        </span><span style="color:#b48ead;">if</span><span> buf.</span><span style="color:#96b5b4;">len</span><span>() &lt; len {
+</span><span>            </span><span style="color:#b48ead;">return </span><span>Err(std::io::Error::new(
+</span><span>                std::io::ErrorKind::InvalidInput,
+</span><span>                &quot;</span><span style="color:#a3be8c;">Provided buffer is not big enough</span><span>&quot;,
+</span><span>            ));
+</span><span>        }
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Reads exactly the amount of bytes necessary for the message
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.inner.</span><span style="color:#96b5b4;">read_exact</span><span>(&amp;</span><span style="color:#b48ead;">mut</span><span> buf[..len])?;
+</span><span>
+</span><span>        Ok(len)
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>In the code above, there are two important details about Traits.</p>
+<p>The <code>PlainReadHalf</code> struct has a <strong>generic type parameter</strong> <code>T</code> that is constrained to <strong>anything that implements Read</strong>, which means T can be a <code>BufReader</code>, a <code>TcpStream</code>, or anything that implements the <code>Read</code> trait.</p>
+<p>Then comes the implementation of the <code>Read</code> trait for the struct itself. With this, <code>PlainReadHalf</code> can be used anywhere a <code>Read</code> type is expected. </p>
+<p>The <code>where T: Read</code> syntax is where the code <strong>isolates the Read aspect</strong> of <code>T</code>. By writing this, <code>T</code> can be anything, but we only care about the <code>Read</code> part.</p>
+<p>Now let’s look the <code>PlainWriteHalf</code> struct</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">/// PlainWriteHalf has an inner writer to write to, 
+</span><span style="color:#65737e;">/// It also has a buffer to hold the information before sending to the writer
+</span><span style="color:#b48ead;">pub struct </span><span>PlainWriteHalf&lt;T&gt; where T: Write {
+</span><span>    </span><span style="color:#bf616a;">inner</span><span>: T,
+</span><span>    </span><span style="color:#bf616a;">buffer</span><span>: Vec&lt;</span><span style="color:#b48ead;">u8</span><span>&gt;,
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl</span><span>&lt;T&gt; PlainWriteHalf&lt;T&gt; </span><span style="color:#b48ead;">where</span><span> T: Write {
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">new</span><span>(</span><span style="color:#bf616a;">inner</span><span>: T) -&gt; </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>        </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>            inner,
+</span><span>            buffer: Vec::new(),
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style="color:#65737e;">// Implements Write for the PlainWriteHalf struct
+</span><span style="color:#b48ead;">impl</span><span>&lt;T&gt; Write </span><span style="color:#b48ead;">for </span><span>PlainWriteHalf&lt;T&gt; </span><span style="color:#b48ead;">where</span><span> T: Write {
+</span><span>    </span><span style="color:#65737e;">// Write function just write the contents to the internal buffer
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">write</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>, </span><span style="color:#bf616a;">buf</span><span>: &amp;[</span><span style="color:#b48ead;">u8</span><span>]) -&gt; std::io::Result&lt;</span><span style="color:#b48ead;">usize</span><span>&gt; {
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.buffer.</span><span style="color:#96b5b4;">extend_from_slice</span><span>(buf);
+</span><span>        Ok(buf.</span><span style="color:#96b5b4;">len</span><span>())
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// Flush is the function that actually send 
+</span><span>    </span><span style="color:#65737e;">// the information to the inner writer
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">flush</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>) -&gt; std::io::Result&lt;()&gt; {
+</span><span>        </span><span style="color:#b48ead;">let</span><span> bytes = (</span><span style="color:#bf616a;">self</span><span>.buffer.</span><span style="color:#96b5b4;">len</span><span>() as </span><span style="color:#b48ead;">u16</span><span>).</span><span style="color:#96b5b4;">to_be_bytes</span><span>().</span><span style="color:#96b5b4;">to_vec</span><span>();
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.inner.</span><span style="color:#96b5b4;">write_all</span><span>(&amp;bytes)?;
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.inner.</span><span style="color:#96b5b4;">write_all</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>.buffer)?;
+</span><span>
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.inner.</span><span style="color:#96b5b4;">flush</span><span>()?;
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.buffer.</span><span style="color:#96b5b4;">clear</span><span>();
+</span><span>
+</span><span>        Ok(())
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>One thing you may be wondering is, what is the benefit of this? That seems to be a lot more code to do the same thing as before. Why go through all this trouble? </p>
+<p>Let’s check the first benefit of traits by writing a test for this struct.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span>#[</span><span style="color:#bf616a;">cfg</span><span>(test)]
+</span><span style="color:#b48ead;">mod </span><span>tests {
+</span><span>    </span><span style="color:#b48ead;">use super</span><span>::*;
+</span><span>    </span><span style="color:#b48ead;">use </span><span>std::io::Cursor;
+</span><span>    </span><span style="color:#b48ead;">use </span><span>std::io::Write;
+</span><span>
+</span><span>    #[</span><span style="color:#bf616a;">test</span><span>]
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">test_plain_write_read</span><span>() {
+</span><span>        </span><span style="color:#65737e;">// Cursor&lt;&amp;mut Vec&lt;T&gt;&gt; implements Write, 
+</span><span>        </span><span style="color:#65737e;">// it can be used with our PlainWriteHalf struct
+</span><span>        </span><span style="color:#b48ead;">let mut</span><span> buf = vec![</span><span style="color:#d08770;">0</span><span style="color:#b48ead;">u8</span><span>; </span><span style="color:#d08770;">512</span><span>];
+</span><span>
+</span><span>        </span><span style="color:#b48ead;">let mut</span><span> writer = PlainWriteHalf::new(Cursor::new(&amp;</span><span style="color:#b48ead;">mut</span><span> buf));
+</span><span>        </span><span style="color:#b48ead;">let </span><span>_ = writer.</span><span style="color:#96b5b4;">write_all</span><span>(&amp;</span><span style="color:#b48ead;">b</span><span>&quot;</span><span style="color:#a3be8c;">some bytes</span><span>&quot;[..]);
+</span><span>        </span><span style="color:#b48ead;">let </span><span>_ = writer.</span><span style="color:#96b5b4;">flush</span><span>();
+</span><span>
+</span><span>        assert_eq!(buf[</span><span style="color:#d08770;">2</span><span>..</span><span style="color:#d08770;">12</span><span>], </span><span style="color:#b48ead;">b</span><span>&quot;</span><span style="color:#a3be8c;">some bytes</span><span>&quot;[..]);
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Cursor&lt;&amp; Vec&lt;T&gt;&gt; implements Read, 
+</span><span>        </span><span style="color:#65737e;">// it can be used with our PlainReadHalf struct
+</span><span>        </span><span style="color:#b48ead;">let mut</span><span> reader = PlainReadHalf::new(Cursor::new(&amp;buf));
+</span><span>
+</span><span>        </span><span style="color:#b48ead;">let mut</span><span> output = String::new();
+</span><span>        </span><span style="color:#b48ead;">let </span><span>_ = reader.</span><span style="color:#96b5b4;">read_to_string</span><span>(&amp;</span><span style="color:#b48ead;">mut</span><span> output);
+</span><span>
+</span><span>        assert_eq!(output, &quot;</span><span style="color:#a3be8c;">some bytes</span><span>&quot;);
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>Notice that we don’t need a TCP connection to test the code, we did manage to write the test for our struct implementation by using another type that implements the necessary traits.</p>
+<p>The encrypted implementation will be very similar to the plain text implementation, except it will have an extra step.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">/// EncryptedReadHalf has the inner writer and a decryptor
+</span><span style="color:#b48ead;">pub struct </span><span>EncryptedReadHalf&lt;T&gt;
+</span><span>where
+</span><span>    T: Read,
+</span><span>{
+</span><span>    </span><span style="color:#bf616a;">inner</span><span>: T,
+</span><span>    </span><span style="color:#bf616a;">decryptor</span><span>: DecryptorLE31&lt;XChaCha20Poly1305&gt;,
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl</span><span>&lt;T&gt; EncryptedReadHalf&lt;T&gt;
+</span><span style="color:#b48ead;">where
+</span><span>    T: Read,
+</span><span>{
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">new</span><span>(</span><span style="color:#bf616a;">inner</span><span>: T, </span><span style="color:#bf616a;">decryptor</span><span>: DecryptorLE31&lt;XChaCha20Poly1305&gt;) -&gt; </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>        </span><span style="color:#b48ead;">Self </span><span>{ inner, decryptor }
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl</span><span>&lt;T&gt; Read </span><span style="color:#b48ead;">for </span><span>EncryptedReadHalf&lt;T&gt;
+</span><span style="color:#b48ead;">where
+</span><span>    T: Read,
+</span><span>{
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">read</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>, </span><span style="color:#bf616a;">buf</span><span>: &amp;</span><span style="color:#b48ead;">mut</span><span> [</span><span style="color:#b48ead;">u8</span><span>]) -&gt; std::io::Result&lt;</span><span style="color:#b48ead;">usize</span><span>&gt; {
+</span><span>        </span><span style="color:#65737e;">// First read the length of the payload
+</span><span>        </span><span style="color:#b48ead;">let mut</span><span> len_buf = [</span><span style="color:#d08770;">0</span><span style="color:#b48ead;">u8</span><span>; </span><span style="color:#d08770;">2</span><span>];
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.inner.</span><span style="color:#96b5b4;">read_exact</span><span>(&amp;</span><span style="color:#b48ead;">mut</span><span> len_buf)?;
+</span><span>        </span><span style="color:#b48ead;">let</span><span> payload_len = </span><span style="color:#b48ead;">u16</span><span>::from_be_bytes(len_buf) as </span><span style="color:#b48ead;">usize</span><span>;
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Reads the payload
+</span><span>        </span><span style="color:#b48ead;">let mut</span><span> payload = vec![</span><span style="color:#d08770;">0</span><span style="color:#b48ead;">u8</span><span>; payload_len];
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.inner.</span><span style="color:#96b5b4;">read_exact</span><span>(&amp;</span><span style="color:#b48ead;">mut</span><span> payload)?;
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Decrypts the payload
+</span><span>        </span><span style="color:#b48ead;">let</span><span> decrypted = </span><span style="color:#bf616a;">self
+</span><span>            .decryptor
+</span><span>            .</span><span style="color:#96b5b4;">decrypt_next</span><span>(&amp;payload[..])
+</span><span>            .</span><span style="color:#96b5b4;">map_err</span><span>(|</span><span style="color:#bf616a;">err</span><span>| { 
+</span><span>                std::io::Error::new(std::io::ErrorKind::InvalidData, err)
+</span><span>            })?;
+</span><span>        </span><span style="color:#b48ead;">let</span><span> decrypted_len = decrypted.</span><span style="color:#96b5b4;">len</span><span>();
+</span><span>        </span><span style="color:#b48ead;">if</span><span> buf.</span><span style="color:#96b5b4;">len</span><span>() &lt; decrypted_len {
+</span><span>            </span><span style="color:#b48ead;">return </span><span>Err(std::io::Error::new(
+</span><span>                std::io::ErrorKind::InvalidInput,
+</span><span>                &quot;</span><span style="color:#a3be8c;">Provided buffer is not big enough</span><span>&quot;,
+</span><span>            ));
+</span><span>        }
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Writes the plain content to the buffer
+</span><span>        buf[..decrypted_len].</span><span style="color:#96b5b4;">copy_from_slice</span><span>(&amp;decrypted[..]);
+</span><span>        Ok(decrypted_len)
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>The WriteHalf implementation is also very similar to the PlainWriteHalf, with just an extra step.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">pub struct </span><span>EncryptedWriteHalf&lt;T&gt;
+</span><span>where
+</span><span>    T: Write,
+</span><span>{
+</span><span>    </span><span style="color:#bf616a;">inner</span><span>: T,
+</span><span>    </span><span style="color:#bf616a;">encryptor</span><span>: EncryptorLE31&lt;XChaCha20Poly1305&gt;,
+</span><span>    </span><span style="color:#bf616a;">buffer</span><span>: Vec&lt;</span><span style="color:#b48ead;">u8</span><span>&gt;,
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl</span><span>&lt;T&gt; EncryptedWriteHalf&lt;T&gt;
+</span><span style="color:#b48ead;">where
+</span><span>    T: Write,
+</span><span>{
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">new</span><span>(</span><span style="color:#bf616a;">inner</span><span>: T, </span><span style="color:#bf616a;">encryptor</span><span>: EncryptorLE31&lt;XChaCha20Poly1305&gt;) -&gt; </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>        </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>            inner,
+</span><span>            encryptor,
+</span><span>            buffer: Vec::new(),
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl</span><span>&lt;T&gt; Write </span><span style="color:#b48ead;">for </span><span>EncryptedWriteHalf&lt;T&gt;
+</span><span style="color:#b48ead;">where
+</span><span>    T: Write,
+</span><span>{
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">write</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>, </span><span style="color:#bf616a;">buf</span><span>: &amp;[</span><span style="color:#b48ead;">u8</span><span>]) -&gt; std::io::Result&lt;</span><span style="color:#b48ead;">usize</span><span>&gt; {
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.buffer.</span><span style="color:#96b5b4;">extend_from_slice</span><span>(buf);
+</span><span>        Ok(buf.</span><span style="color:#96b5b4;">len</span><span>())
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">flush</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>) -&gt; std::io::Result&lt;()&gt; {
+</span><span>        </span><span style="color:#65737e;">// Encrypts the contents of the internal buffer
+</span><span>        </span><span style="color:#b48ead;">let</span><span> encrypted = </span><span style="color:#bf616a;">self
+</span><span>            .encryptor
+</span><span>            .</span><span style="color:#96b5b4;">encrypt_next</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>.buffer[..])
+</span><span>            .</span><span style="color:#96b5b4;">map_err</span><span>(|</span><span style="color:#bf616a;">err</span><span>| { 
+</span><span>                std::io::Error::new(std::io::ErrorKind::InvalidInput, err)
+</span><span>            })?;
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Writes the encrypted value to the internal writer
+</span><span>        </span><span style="color:#b48ead;">let</span><span> len_bytes = (encrypted.</span><span style="color:#96b5b4;">len</span><span>() as </span><span style="color:#b48ead;">u16</span><span>).</span><span style="color:#96b5b4;">to_be_bytes</span><span>().</span><span style="color:#96b5b4;">to_vec</span><span>();
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.inner.</span><span style="color:#96b5b4;">write_all</span><span>(&amp;len_bytes)?;
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.inner.</span><span style="color:#96b5b4;">write_all</span><span>(&amp;encrypted)?;
+</span><span>
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.inner.</span><span style="color:#96b5b4;">flush</span><span>()?;
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Clean the internal buffer
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.buffer.</span><span style="color:#96b5b4;">clear</span><span>();
+</span><span>
+</span><span>        Ok(())
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>And again, let’s write a test case.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span>#[</span><span style="color:#bf616a;">cfg</span><span>(test)]
+</span><span style="color:#b48ead;">mod </span><span>tests {
+</span><span>    </span><span style="color:#b48ead;">use super</span><span>::*;
+</span><span>    </span><span style="color:#b48ead;">use </span><span>std::io::Cursor;
+</span><span>    </span><span style="color:#b48ead;">use </span><span>std::io::Write;
+</span><span>
+</span><span>    #[</span><span style="color:#bf616a;">test</span><span>]
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">test_encryption</span><span>() {
+</span><span>        </span><span style="color:#b48ead;">let mut</span><span> buf = vec![</span><span style="color:#d08770;">0</span><span style="color:#b48ead;">u8</span><span>; </span><span style="color:#d08770;">512</span><span>];
+</span><span>        </span><span style="color:#b48ead;">let </span><span>(encryptor, decryptor) =
+</span><span>            </span><span style="color:#b48ead;">super</span><span>::</span><span style="color:#b48ead;">super</span><span>::get_encryptor_and_decryptor([</span><span style="color:#d08770;">0</span><span style="color:#b48ead;">u8</span><span>; </span><span style="color:#d08770;">32</span><span>], [</span><span style="color:#d08770;">0</span><span style="color:#b48ead;">u8</span><span>; </span><span style="color:#d08770;">20</span><span>]);
+</span><span>
+</span><span>        </span><span style="color:#b48ead;">let mut</span><span> writer = EncryptedWriteHalf::new(Cursor::new(&amp;</span><span style="color:#b48ead;">mut</span><span> buf), encryptor);
+</span><span>        </span><span style="color:#b48ead;">let </span><span>_ = writer.</span><span style="color:#96b5b4;">write_all</span><span>(&amp;</span><span style="color:#b48ead;">b</span><span>&quot;</span><span style="color:#a3be8c;">some bytes</span><span>&quot;[..]);
+</span><span>        </span><span style="color:#b48ead;">let </span><span>_ = writer.</span><span style="color:#96b5b4;">flush</span><span>();
+</span><span>
+</span><span>        </span><span style="color:#b48ead;">let mut</span><span> reader = EncryptedReadHalf::new(Cursor::new(&amp;buf), decryptor);
+</span><span>        </span><span style="color:#b48ead;">let mut</span><span> output = String::new();
+</span><span>        </span><span style="color:#b48ead;">let </span><span>_ = reader.</span><span style="color:#96b5b4;">read_to_string</span><span>(&amp;</span><span style="color:#b48ead;">mut</span><span> output);
+</span><span>
+</span><span>        assert_eq!(output, &quot;</span><span style="color:#a3be8c;">some bytes</span><span>&quot;);
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>The only thing left is to adapt the rest of the code to use the new structs. With the new structs, the <code>thread</code> handling will change because of the rust borrower checker.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">/// send_data receives a writer, it can be anything that implements Write
+</span><span style="color:#65737e;">/// It will work with PlainWriteHalf or EncryptedWriteHalf
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">send_data</span><span>(</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">stream</span><span>: impl Write, </span><span style="color:#bf616a;">rx</span><span>: Receiver&lt;OutboundMessage&gt;) {
+</span><span>    </span><span style="color:#b48ead;">while let </span><span>Ok(OutboundMessage(bytes)) = rx.</span><span style="color:#96b5b4;">recv</span><span>() {
+</span><span>        </span><span style="color:#b48ead;">if</span><span> stream.</span><span style="color:#96b5b4;">write_all</span><span>(&amp;bytes).</span><span style="color:#96b5b4;">is_err</span><span>() {
+</span><span>            </span><span style="color:#b48ead;">break</span><span>;
+</span><span>        }
+</span><span>
+</span><span>        </span><span style="color:#b48ead;">if</span><span> stream.</span><span style="color:#96b5b4;">flush</span><span>().</span><span style="color:#96b5b4;">is_err</span><span>() {
+</span><span>            </span><span style="color:#b48ead;">break</span><span>;
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style="color:#65737e;">/// receive_data receives a reader, it can be anything that implements Read
+</span><span style="color:#65737e;">/// It will work with PlainReadHalf or EncryptedReadHalf
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">receive_data</span><span>(</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">stream</span><span>: impl Read, </span><span style="color:#bf616a;">tx</span><span>: Sender&lt;InboundMessage&gt;) {
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> buf = vec![</span><span style="color:#d08770;">0</span><span style="color:#b48ead;">u8</span><span>; </span><span style="color:#d08770;">4096</span><span>];
+</span><span>    </span><span style="color:#b48ead;">while let </span><span>Ok(n) = stream.</span><span style="color:#96b5b4;">read</span><span>(&amp;</span><span style="color:#b48ead;">mut</span><span> buf[..]) {
+</span><span>        </span><span style="color:#b48ead;">if</span><span> n == </span><span style="color:#d08770;">0 </span><span>{
+</span><span>            </span><span style="color:#b48ead;">break</span><span>;
+</span><span>        }
+</span><span>
+</span><span>        </span><span style="color:#b48ead;">if</span><span> tx.</span><span style="color:#96b5b4;">send</span><span>(InboundMessage(buf[..n].</span><span style="color:#96b5b4;">to_vec</span><span>())).</span><span style="color:#96b5b4;">is_err</span><span>() {
+</span><span>            </span><span style="color:#b48ead;">break</span><span>;
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">connect_to_host</span><span>(
+</span><span>    </span><span style="color:#bf616a;">addr</span><span>: &amp;</span><span style="color:#b48ead;">str</span><span>,
+</span><span>    </span><span style="color:#bf616a;">key</span><span>: [</span><span style="color:#b48ead;">u8</span><span>; 32],
+</span><span>    </span><span style="color:#bf616a;">nonce</span><span>: [</span><span style="color:#b48ead;">u8</span><span>; 20],
+</span><span>    </span><span style="color:#bf616a;">encryption_enabled</span><span>: </span><span style="color:#b48ead;">bool</span><span>,
+</span><span>) -&gt; (Sender&lt;OutboundMessage&gt;, Receiver&lt;InboundMessage&gt;) {
+</span><span>    </span><span style="color:#65737e;">// Connects to the host 
+</span><span>    </span><span style="color:#65737e;">// &amp;mut &amp;TcpStream implements both Read and Write traits
+</span><span>    </span><span style="color:#65737e;">// So we create two copies of it to send to each thread 
+</span><span>    </span><span style="color:#b48ead;">let</span><span> stream = Arc::new(TcpStream::connect(addr).</span><span style="color:#96b5b4;">expect</span><span>(&quot;</span><span style="color:#a3be8c;">Failed to connect</span><span>&quot;));
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// Each copy will be moved to a different thread
+</span><span>    </span><span style="color:#b48ead;">let</span><span> read_half = stream.</span><span style="color:#96b5b4;">clone</span><span>();
+</span><span>    </span><span style="color:#b48ead;">let</span><span> write_half = stream.</span><span style="color:#96b5b4;">clone</span><span>();
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// Initialize the channels to be returned from this function
+</span><span>    </span><span style="color:#b48ead;">let </span><span>(out_tx, out_rx) = std::sync::mpsc::channel();
+</span><span>    </span><span style="color:#b48ead;">let </span><span>(in_tx, in_rx) = std::sync::mpsc::channel();
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">if</span><span> encryption_enabled {
+</span><span>        </span><span style="color:#b48ead;">let </span><span>(encryptor, decryptor) = </span><span style="color:#96b5b4;">get_encryptor_and_decryptor</span><span>(key, nonce);
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Moves read_half and decryptor to a new thread
+</span><span>        thread::spawn(</span><span style="color:#b48ead;">move </span><span>|| {
+</span><span>            </span><span style="color:#b48ead;">let</span><span> read_half = &amp;*read_half; 
+</span><span>            </span><span style="color:#96b5b4;">receive_data</span><span>(
+</span><span>                encrypted::EncryptedReadHalf::new(read_half, decryptor),
+</span><span>                in_tx,
+</span><span>            );
+</span><span>        });
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Moves write_half and encryptor to a new thread
+</span><span>        thread::spawn(</span><span style="color:#b48ead;">move </span><span>|| {
+</span><span>            </span><span style="color:#b48ead;">let</span><span> write_half = &amp;*write_half;
+</span><span>            </span><span style="color:#96b5b4;">send_data</span><span>(
+</span><span>                encrypted::EncryptedWriteHalf::new(write_half, encryptor),
+</span><span>                out_rx,
+</span><span>            );
+</span><span>        });
+</span><span>    } </span><span style="color:#b48ead;">else </span><span>{
+</span><span>        </span><span style="color:#65737e;">// Moves read_half to a new thread
+</span><span>        thread::spawn(</span><span style="color:#b48ead;">move </span><span>|| {
+</span><span>            </span><span style="color:#b48ead;">let</span><span> read_half = &amp;*read_half;
+</span><span>            </span><span style="color:#96b5b4;">receive_data</span><span>(plain::PlainReadHalf::new(read_half), in_tx);
+</span><span>        });
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Moves write_half to a new thread
+</span><span>        thread::spawn(</span><span style="color:#b48ead;">move </span><span>|| {
+</span><span>            </span><span style="color:#b48ead;">let</span><span> write_half = &amp;*write_half;
+</span><span>            </span><span style="color:#96b5b4;">send_data</span><span>(plain::PlainWriteHalf::new(write_half), out_rx);
+</span><span>        });
+</span><span>    }
+</span><span>
+</span><span>    (out_tx, in_rx)
+</span><span>}
+</span></code></pre>
+<p>In this new implementation, the code can be easily extended to add new features.</p>
+<p>For instance, if you want to data compression, a new struct can be used to implement the Read and Write traits.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span>thread::spawn(</span><span style="color:#b48ead;">move </span><span>|| {
+</span><span>    </span><span style="color:#b48ead;">let</span><span> read_half = &amp;*read_half; 
+</span><span>    </span><span style="color:#96b5b4;">receive_data</span><span>(
+</span><span>        compression::CompressedReadHalf::new(
+</span><span>            encrypted::EncryptedReadHalf::new(read_half, decryptor)
+</span><span>        ),
+</span><span>        in_tx,
+</span><span>    );
+</span><span>});
+</span><span>
+</span><span>thread::spawn(</span><span style="color:#b48ead;">move </span><span>|| {
+</span><span>    </span><span style="color:#b48ead;">let</span><span> write_half = &amp;*write_half;
+</span><span>    </span><span style="color:#96b5b4;">send_data</span><span>(
+</span><span>        compression::CompressedWriteHalf::new(
+</span><span>            encrypted::EncryptedWriteHalf::new(write_half, encryptor)
+</span><span>        ),
+</span><span>        out_rx,
+</span><span>    );
+</span><span>});
+</span></code></pre>
+<h1 id="dynamic-use-of-traits">Dynamic use of traits.</h1>
+<p>There is one thing in the <code>connect_to_host</code> function above that I don’t like, there is a lot of repetition. It is possible to slim it down by spawning the threads only once.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">let </span><span>(reader, writer) = </span><span style="color:#b48ead;">if</span><span> encryption_enabled {
+</span><span>    </span><span style="color:#b48ead;">let </span><span>(encryptor, decryptor) = </span><span style="color:#96b5b4;">get_encryptor_and_decryptor</span><span>(key, nonce);
+</span><span>    </span><span style="color:#b48ead;">let</span><span> reader = encrypted::EncryptedReadHalf::new(read_half, decryptor);
+</span><span>    ler writer = encrypted::EncryptedWriteHalf::new(write_half, encryptor);
+</span><span>
+</span><span>    (reader, writer)
+</span><span>} </span><span style="color:#b48ead;">else </span><span>{
+</span><span>    </span><span style="color:#b48ead;">let</span><span> reader = plain::PlainReadHalf::new(read_half);
+</span><span>    ler writer = plain::PlainWriteHalf::new(write_half);
+</span><span>
+</span><span>    (reader, writer)
+</span><span>}
+</span><span>
+</span><span>thread::spawn(</span><span style="color:#b48ead;">move </span><span>|| {
+</span><span>    </span><span style="color:#96b5b4;">receive_data</span><span>(reader, in_tx);
+</span><span>});
+</span><span>
+</span><span>thread::spawn(</span><span style="color:#b48ead;">move </span><span>|| {
+</span><span>    </span><span style="color:#96b5b4;">send_data</span><span>(writer, out_rx);
+</span><span>});
+</span></code></pre>
+<p>The code above is a lot cleaner, however, it does not compile because both paths of the if statement must return the same type, which is not happening now. The same problem happens when calling <code>receive_data</code> and <code>send_data</code> functions, the type must be known before calling. To understand how that can be fixed, we need to first talk about generics and <a href="https://en.wikipedia.org/wiki/Dynamic_dispatch">dynamic dispatch</a>.</p>
+<p>When you write rust code with a generic parameter <code>&lt;T&gt;</code>, the compiler will use <a href="https://en.wikipedia.org/wiki/Monomorphization">monomorphization</a> to generate code with concrete types, for instance:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">my_func</span><span>&lt;T&gt;() {}
+</span><span>
+</span><span>my_func&lt;</span><span style="color:#b48ead;">u32</span><span>&gt;(); </span><span style="color:#65737e;">// This will generate my_func_u32 when compiled
+</span><span>my_func&lt;</span><span style="color:#b48ead;">u16</span><span>&gt;(); </span><span style="color:#65737e;">// This will generate my_func_u16 when compiled
+</span><span>
+</span><span style="color:#b48ead;">struct </span><span>MyStruct&lt;T&gt; {
+</span><span>    </span><span style="color:#bf616a;">inner</span><span>: T
+</span><span>}
+</span><span>
+</span><span>var s = MyStruct { inner: </span><span style="color:#d08770;">0</span><span style="color:#b48ead;">u32 </span><span>}; </span><span style="color:#65737e;">// MyStruct_u32
+</span><span>my_func&lt;MyStruct&lt;</span><span style="color:#b48ead;">u32</span><span>&gt;&gt;(); </span><span style="color:#65737e;">// This will generate my_func_my_struct_u32
+</span></code></pre>
+<p>The only restriction with generics is that you need to know the concrete types at compile time, which is not always the case. When the type cannot be defined, such as when it depends on a user-provided parameter, we can use dynamic dispatch. The way to do that in Rust is to use the <code>dyn Trait</code> syntax. For instance.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">send_data</span><span>&lt;T: Write&gt;(</span><span style="color:#bf616a;">writer</span><span>: T) </span><span style="color:#65737e;">// Concrete generic type
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">send_data</span><span>(</span><span style="color:#bf616a;">writer</span><span>: impl Write) </span><span style="color:#65737e;">// This is equivalent to the one above
+</span><span>
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">send_data</span><span>(</span><span style="color:#bf616a;">writer</span><span>: &amp;dyn Write) </span><span style="color:#65737e;">// Dynamic dispatch with a reference
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">send_data</span><span>(</span><span style="color:#bf616a;">writer</span><span>: Box&lt;dyn Write&gt;) </span><span style="color:#65737e;">// Dynamic dispatch with owned type
+</span><span>
+</span><span style="color:#65737e;">// Returning a type that implements a trait
+</span><span>
+</span><span style="color:#65737e;">// Concrete generic type, no branching is allowed inside the function
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">get_writer</span><span>&lt;T: Write&gt;() -&gt; T; 
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">get_writer</span><span>() -&gt; impl Write;
+</span><span>
+</span><span style="color:#65737e;">// Dynamic dispatch, it is allowed to branch and return different types
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">get_writer</span><span>() -&gt; Box&lt;dyn Write&gt;
+</span></code></pre>
+<p>Let’s see how it is possible to change the <code>connect_to_host</code> function to use dynamic dispatch.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">connect_to_host</span><span>(
+</span><span>    </span><span style="color:#bf616a;">addr</span><span>: &amp;</span><span style="color:#b48ead;">str</span><span>,
+</span><span>    </span><span style="color:#bf616a;">key</span><span>: [</span><span style="color:#b48ead;">u8</span><span>; 32],
+</span><span>    </span><span style="color:#bf616a;">nonce</span><span>: [</span><span style="color:#b48ead;">u8</span><span>; 20],
+</span><span>    </span><span style="color:#bf616a;">encryption_enabled</span><span>: </span><span style="color:#b48ead;">bool</span><span>,
+</span><span>    </span><span style="color:#bf616a;">out_rx</span><span>: Receiver&lt;OutboundMessage&gt;,
+</span><span>    </span><span style="color:#bf616a;">in_tx</span><span>: Sender&lt;InboundMessage&gt;,
+</span><span>) {
+</span><span>    </span><span style="color:#b48ead;">let</span><span> stream = Arc::new(TcpStream::connect(addr).</span><span style="color:#96b5b4;">expect</span><span>(&quot;</span><span style="color:#a3be8c;">Failed to connect</span><span>&quot;));
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// explicitly declare reader: Box&lt;dyn Read + Send&gt; and writer: Box&lt;dyn Write + Send&gt;
+</span><span>    </span><span style="color:#b48ead;">let </span><span>(reader, writer): (Box&lt;dyn Read + Send&gt;, Box&lt;dyn Write + Send&gt;) = </span><span style="color:#b48ead;">if</span><span> encryption_enabled {
+</span><span>        </span><span style="color:#b48ead;">let </span><span>(encryptor, decryptor) = </span><span style="color:#96b5b4;">get_encryptor_and_decryptor</span><span>(key, nonce);
+</span><span>
+</span><span>        </span><span style="color:#b48ead;">let</span><span> reader = encrypted::EncryptedReadHalf::new(&amp;*stream, decryptor);
+</span><span>        </span><span style="color:#b48ead;">let</span><span> writer = encrypted::EncryptedWriteHalf::new(&amp;*stream, encryptor);
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Send reader and writer to the heap, by boxing them
+</span><span>        </span><span style="color:#65737e;">// this will allow the dynamic dispatch
+</span><span>        (Box::new(reader), Box::new(writer))
+</span><span>    } </span><span style="color:#b48ead;">else </span><span>{
+</span><span>        </span><span style="color:#b48ead;">let</span><span> reader = plain::PlainReadHalf::new(&amp;*stream);
+</span><span>        </span><span style="color:#b48ead;">let</span><span> writer = plain::PlainWriteHalf::new(&amp;*stream);
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Send reader and writer to the heap, by boxing them
+</span><span>        </span><span style="color:#65737e;">// this will allow the dynamic dispatch
+</span><span>        (Box::new(reader), Box::new(writer))
+</span><span>    };
+</span><span>
+</span><span>    thread::scope(|</span><span style="color:#bf616a;">s</span><span>| {
+</span><span>        s.</span><span style="color:#96b5b4;">spawn</span><span>(</span><span style="color:#b48ead;">move </span><span>|| {
+</span><span>            </span><span style="color:#96b5b4;">send_data</span><span>(writer, out_rx);
+</span><span>        });
+</span><span>
+</span><span>        s.</span><span style="color:#96b5b4;">spawn</span><span>(</span><span style="color:#b48ead;">move </span><span>|| {
+</span><span>            </span><span style="color:#96b5b4;">receive_data</span><span>(reader, in_tx);
+</span><span>        });
+</span><span>    })
+</span><span>}
+</span></code></pre>
+<p>The syntax <code>Trait + AnotherTrait</code> specifies how multiple trait constraints are defined in Rust. In our case, <code>Read + Send</code> is <strong>must implement Read and Send</strong>. <a href="https://doc.rust-lang.org/std/marker/trait.Send.html">Send</a> is how Rust knows that a type can be sent to another thread.</p>
+<p>In this particular case, it is not necessary to change <code>send_data</code> and <code>receive_data</code> signatures because Box implements both <a href="https://doc.rust-lang.org/std/boxed/struct.Box.html?search=arc#impl-Write-for-Box%3CW%3E">Write</a> and <a href="https://doc.rust-lang.org/std/boxed/struct.Box.html?search=arc#impl-Read-for-Box%3CR%3E">Read</a>, but this is how it would look like.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">send_data</span><span>&lt;</span><span style="color:#b48ead;">&#39;a</span><span>&gt;(</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">stream</span><span>: Box&lt;dyn Write + </span><span style="color:#b48ead;">&#39;a</span><span>&gt;, </span><span style="color:#bf616a;">rx</span><span>: Receiver&lt;OutboundMessage&gt;)
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">receive_data</span><span>&lt;</span><span style="color:#b48ead;">&#39;a</span><span>&gt;(</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">stream</span><span>: Box&lt;dyn Read + </span><span style="color:#b48ead;">&#39;a</span><span>&gt;, </span><span style="color:#bf616a;">tx</span><span>: Sender&lt;InboundMessage&gt;)
+</span></code></pre>
+<p>One last observation before we wrap up. Since we are talking about improving the code with traits, it wouldn’t be fair if I don’t show how to make the encryption algorithm generic as well.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">use </span><span>std::io::{Read, Write};
+</span><span style="color:#b48ead;">use </span><span>std::ops::Sub;
+</span><span style="color:#b48ead;">use </span><span>chacha20poly1305::{
+</span><span>    aead::{
+</span><span>        generic_array::ArrayLength,
+</span><span>        stream::{Decryptor, Encryptor, NonceSize, StreamPrimitive},
+</span><span>    },
+</span><span>    AeadInPlace,
+</span><span>};
+</span><span>
+</span><span style="color:#65737e;">// Introduces the U parameter for the decryptor.
+</span><span style="color:#65737e;">// Notice we don&#39;t need to add the constraints here.
+</span><span style="color:#b48ead;">pub struct </span><span>EncryptedReadHalf&lt;T, U&gt; {
+</span><span>    </span><span style="color:#bf616a;">inner</span><span>: T,
+</span><span>    </span><span style="color:#bf616a;">decryptor</span><span>: U,
+</span><span>}
+</span><span>
+</span><span style="color:#65737e;">// Introduces all the constraints necessary for the Decryptor to work
+</span><span style="color:#65737e;">// This allow us to use the struct with any stream decryption algorithm
+</span><span style="color:#b48ead;">impl</span><span>&lt;T, A, S&gt; EncryptedReadHalf&lt;T, Decryptor&lt;A, S&gt;&gt;
+</span><span style="color:#b48ead;">where
+</span><span>    T: Read,
+</span><span>    S: StreamPrimitive&lt;A&gt;,
+</span><span>    A: AeadInPlace,
+</span><span>    </span><span style="color:#b48ead;">A::</span><span>NonceSize: Sub&lt;&lt;S as StreamPrimitive&lt;A&gt;&gt;::NonceOverhead&gt;,
+</span><span>    NonceSize&lt;A, S&gt;: ArrayLength&lt;</span><span style="color:#b48ead;">u8</span><span>&gt;,
+</span><span>{
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">new</span><span>(</span><span style="color:#bf616a;">inner</span><span>: T, </span><span style="color:#bf616a;">decryptor</span><span>: Decryptor&lt;A, S&gt;) -&gt; </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>        </span><span style="color:#b48ead;">Self </span><span>{ inner, decryptor }
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl</span><span>&lt;T, A, S&gt; Read </span><span style="color:#b48ead;">for </span><span>EncryptedReadHalf&lt;T, Decryptor&lt;A, S&gt;&gt;
+</span><span style="color:#b48ead;">where
+</span><span>    T: Read,
+</span><span>    S: StreamPrimitive&lt;A&gt;,
+</span><span>    A: AeadInPlace,
+</span><span>    </span><span style="color:#b48ead;">A::</span><span>NonceSize: Sub&lt;&lt;S as StreamPrimitive&lt;A&gt;&gt;::NonceOverhead&gt;,
+</span><span>    NonceSize&lt;A, S&gt;: ArrayLength&lt;</span><span style="color:#b48ead;">u8</span><span>&gt;,
+</span><span>{
+</span><span>    </span><span style="color:#65737e;">// ...
+</span><span>}
+</span><span>
+</span><span>
+</span><span style="color:#65737e;">// Introduces the U parameter for the encryptor.
+</span><span style="color:#65737e;">// Notice we don&#39;t need to add the constraints here.
+</span><span style="color:#b48ead;">pub struct </span><span>EncryptedWriteHalf&lt;T, U&gt; {
+</span><span>    </span><span style="color:#bf616a;">inner</span><span>: T,
+</span><span>    </span><span style="color:#bf616a;">encryptor</span><span>: U,
+</span><span>}
+</span><span>
+</span><span style="color:#65737e;">// Introduces all the constraints necessary for the Encryptro to work
+</span><span style="color:#65737e;">// This allow us to use the struct with any stream encryption algorithm
+</span><span style="color:#b48ead;">impl</span><span>&lt;T, A, S&gt; EncryptedWriteHalf&lt;T, Encryptor&lt;A, S&gt;&gt;
+</span><span style="color:#b48ead;">where
+</span><span>    T: Write,
+</span><span>    S: StreamPrimitive&lt;A&gt;,
+</span><span>    A: AeadInPlace,
+</span><span>    </span><span style="color:#b48ead;">A::</span><span>NonceSize: Sub&lt;&lt;S as StreamPrimitive&lt;A&gt;&gt;::NonceOverhead&gt;,
+</span><span>    NonceSize&lt;A, S&gt;: ArrayLength&lt;</span><span style="color:#b48ead;">u8</span><span>&gt;,
+</span><span>{
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">new</span><span>(</span><span style="color:#bf616a;">inner</span><span>: T, </span><span style="color:#bf616a;">encryptor</span><span>: Encryptor&lt;A, S&gt;) -&gt; </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>        </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>            inner,
+</span><span>            encryptor,
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl</span><span>&lt;T, A, S&gt; Write </span><span style="color:#b48ead;">for </span><span>EncryptedWriteHalf&lt;T, Encryptor&lt;A, S&gt;&gt;
+</span><span style="color:#b48ead;">where
+</span><span>    T: Write,
+</span><span>    S: StreamPrimitive&lt;A&gt;,
+</span><span>    A: AeadInPlace,
+</span><span>    </span><span style="color:#b48ead;">A::</span><span>NonceSize: Sub&lt;&lt;S as StreamPrimitive&lt;A&gt;&gt;::NonceOverhead&gt;,
+</span><span>    NonceSize&lt;A, S&gt;: ArrayLength&lt;</span><span style="color:#b48ead;">u8</span><span>&gt;,
+</span><span>{
+</span><span>    </span><span style="color:#65737e;">// ...
+</span><span>}
+</span></code></pre>
+<h1 id="conclusion">Conclusion</h1>
+<p>In this post, we have learned how to use traits to isolate code behavior and write cleaner code.</p>
+<p>With the use of Traits, we can:</p>
+<ul>
+<li>Isolate and decouple code behavior.</li>
+<li>Test specific parts of the code.</li>
+<li>Reuse and share specific behaviors.</li>
+<li>Compose behavior by using multiple traits.</li>
+</ul>
+<p>If you were struggling to understand what are Traits, or what are the benefits of using them, I hope this post have helped you.</p>
+
+        </div>
+
+        
+        <div class="pagination">
+            <div class="pagination__title">
+                <span class="pagination__title-h">Thanks for reading! Read other posts?</span>
+                <hr />
+            </div>
+            <div class="pagination__buttons">
+                    <span class="button previous">
+                        <a href="https://balliegojr.github.io/state-machine/">
+                            <span class="button__icon">←</span>&nbsp;
+                            <span class="button__text">Taking advantage of state machine concepts to organize code</span>
+                        </a>
+                    </span>
+                
+                </div>
+        </div>
+    
+    </div>
+
+    </div>
+
+    
+    <footer class="footer">
+        <div class="footer__inner">
+                <div class="copyright">
+                        <span>© 
+    2024
+ Ilson Balliego</span>
+                    <span class="copyright-theme">
+                        <span class="copyright-theme-sep">:: </span>
+                        Theme: <a href="https://github.com/pawroman/zola-theme-terminimal/">Terminimal</a> by pawroman
+                    </span>
+                </div>
+            </div>
+    </footer>
+    
+
+</div>
+</body>
+
+</html>
+
+
+

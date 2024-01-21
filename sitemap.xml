@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+        <loc>https://balliegojr.github.io/</loc>
+    </url>
+    <url>
+        <loc>https://balliegojr.github.io/about/</loc>
+    </url>
+    <url>
+        <loc>https://balliegojr.github.io/page/1/</loc>
+    </url>
+    <url>
+        <loc>https://balliegojr.github.io/state-machine/</loc>
+        <lastmod>2023-05-15</lastmod>
+    </url>
+    <url>
+        <loc>https://balliegojr.github.io/tags/</loc>
+    </url>
+    <url>
+        <loc>https://balliegojr.github.io/tags/enums/</loc>
+    </url>
+    <url>
+        <loc>https://balliegojr.github.io/tags/rust/</loc>
+    </url>
+    <url>
+        <loc>https://balliegojr.github.io/tags/state-machine/</loc>
+    </url>
+    <url>
+        <loc>https://balliegojr.github.io/tags/traits/</loc>
+    </url>
+    <url>
+        <loc>https://balliegojr.github.io/traits-for-beginners/</loc>
+        <lastmod>2024-01-07</lastmod>
+    </url>
+</urlset>

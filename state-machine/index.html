@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Taking advantage of state machine concepts to organize code | balliegojr</title>
+    
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    <meta name="robots" content="noodp"/>
+
+    <link rel="stylesheet" href="https://balliegojr.github.io/style.css">
+    <link rel="stylesheet" href="https://balliegojr.github.io/color/green.css">
+
+        <link rel="stylesheet" href="https://balliegojr.github.io/color/background_dark.css">
+    
+    <link rel="stylesheet" href="https://balliegojr.github.io/font-hack-subset.css">
+
+    <meta name="description" content="In this post we are going to explore the concept of a state machine to help organize our code. The goal is to explore different code designs, rather than build a full blown state machine.">
+
+    <meta property="og:description" content="In this post we are going to explore the concept of a state machine to help organize our code. The goal is to explore different code designs, rather than build a full blown state machine.">
+    <meta property="og:title" content="Taking advantage of state machine concepts to organize code | balliegojr">
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="https://balliegojr.github.io/state-machine/">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:description" content="In this post we are going to explore the concept of a state machine to help organize our code. The goal is to explore different code designs, rather than build a full blown state machine.">
+    <meta name="twitter:title" content="Taking advantage of state machine concepts to organize code | balliegojr">
+    <meta property="twitter:domain" content="balliegojr.github.io">
+    <meta property="twitter:url" content="https://balliegojr.github.io/state-machine/">
+
+            <link rel="alternate" type="application/rss+xml" title="RSS" href="https://balliegojr.github.io/rss.xml">
+    <link rel="stylesheet" href="https://balliegojr.github.io/blog_style.css">
+
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true });
+  </script>
+</head>
+
+<body class="">
+<div class="container">
+    
+    <header class="header">
+        <div class="header__inner">
+            <div class="header__logo">
+                    
+                <a href="https://balliegojr.github.io" style="text-decoration: none;">
+                    <div class="logo">
+                      
+                            balliegojr
+                        
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        
+        
+                <nav class="menu">
+            <ul class="menu__inner">
+                <li class="active"><a href="https://balliegojr.github.io">blog</a></li>
+            
+                <li><a href="https://balliegojr.github.io/tags">tags</a></li>
+            
+                <li><a href="https://balliegojr.github.io/about">about me</a></li>
+            
+                <li><a href="https://github.com/balliegojr/blog" target="_blank" rel="noopener noreferrer">source</a></li>
+            </ul>
+        </nav>
+    
+    
+        
+    </header>
+    
+
+    <div class="content">
+        
+    <div class="post">
+        
+    <h1 class="post-title"><a href="https://balliegojr.github.io/state-machine/">Taking advantage of state machine concepts to organize code</a></h1>
+    <div class="post-meta-inline">
+        
+    <span class="post-date">
+            2023-05-15
+        </span>
+
+    </div>
+
+    
+        <span class="post-tags-inline">
+                :: tags:&nbsp;
+                <a class="post-tag" href="https://balliegojr.github.io/tags/enums/">#enums</a>&nbsp;
+                <a class="post-tag" href="https://balliegojr.github.io/tags/rust/">#rust</a>&nbsp;
+                <a class="post-tag" href="https://balliegojr.github.io/tags/state-machine/">#state machine</a>&nbsp;
+                <a class="post-tag" href="https://balliegojr.github.io/tags/traits/">#traits</a></span>
+    
+
+        <div class="post-content">
+            <p>In this post we are going to explore the concept of a state machine to help organize our code. The goal is to explore different code designs, rather than build a full blown state machine.</p>
+<span id="continue-reading"></span><fieldset>
+    
+        <legend>Code</legend>
+    
+
+    
+        The code seen in the snippets is available <a href="https://github.com/balliegojr/state-machine" target="_blank">here</a>, as well as the benchmarks.
+    
+</fieldset>
+<h1 id="what-is-a-state-machine">What is a state machine?</h1>
+<p><a href="https://en.wikipedia.org/wiki/Finite-state_machine">Wikipedia</a> has a very nice article on the subject, but the definition is actually very short.</p>
+<blockquote>
+<p>It is an abstract machine that can be in exactly one of a finite number of states at any given time. 
+The FSM can change from one state to another in response to some inputs; the change from one state to another is called a transition</p>
+</blockquote>
+<p>Think about it as a sequence of individual steps, where only one step can be executed at a time. Very simple.</p>
+<fieldset>
+    
+        <legend>Opinion</legend>
+    
+
+    
+        The state machine abstraction is particularly useful for synchronization in a distributed system. By splitting a process into smaller steps, it is possible to synchronize the execution on different nodes by advancing the node to next state. Whenever a node enters a state, it only cares about the data related to that particular state. A simple log on the state transitions will be enough to identify if a node is in the expected state, which will make your life easier when trying to identify problems.</p>
+<p>By using a state machine abstraction, your code can be simpler and easier to understand, which will decrease the likelihood of bugs.
+    
+</fieldset>
+<h1 id="implementation-goals">Implementation Goals</h1>
+<p>The goal is to write code that is easy to read, write, and reuse.</p>
+<p>We are going to implement a pseudo consensus process. The steps are:</p>
+<ol>
+<li>Discover all nodes in the network</li>
+<li>Connect to all nodes</li>
+<li>Elect a leader</li>
+<li>Start a sync process
+<ol>
+<li>Followers will wait for events</li>
+<li>The Leader will only send events</li>
+</ol>
+</li>
+</ol>
+<p>We are going to try a few different implementations, first we will use enums and then traits, and of course, we are going to benchmark them.</p>
+<h1 id="implementation-1-enums">Implementation #1: Enums</h1>
+<p>Data carrying enums are perfect for implementing a state machine, because they impose the <strong>one state at a time</strong> rule by design</p>
+<p>There are a few ways that we can implement this when using enums. One possible way is by using self consuming states.</p>
+<p>We need a trait and an executor function, since we want it to be generic.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">/// A trait that represents the state machine
+</span><span style="color:#65737e;">/// This will be implemented for every state machine enum
+</span><span style="color:#b48ead;">pub trait </span><span>StateMachine {
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">execute</span><span>(</span><span style="color:#bf616a;">self</span><span>) -&gt; Result&lt;</span><span style="color:#b48ead;">Self</span><span>, Box&lt;dyn Error&gt;&gt;
+</span><span>    </span><span style="color:#b48ead;">where
+</span><span>        </span><span style="color:#b48ead;">Self</span><span>: Sized;
+</span><span>
+</span><span>    fn is_terminal_state(&amp;self) -&gt; </span><span style="color:#b48ead;">bool</span><span>;
+</span><span>}
+</span><span>
+</span><span>
+</span><span style="color:#65737e;">/// An executor that drives that state machine
+</span><span>pub fn executor&lt;T: StateMachine&gt;(
+</span><span>    initial_state: T,
+</span><span>) -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> current_state = initial_state;
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">while </span><span>!current_state.</span><span style="color:#96b5b4;">is_terminal_state</span><span>() {
+</span><span>        current_state = current_state.</span><span style="color:#96b5b4;">execute</span><span>()?;
+</span><span>    }
+</span><span>
+</span><span>    Ok(())
+</span><span>}
+</span></code></pre>
+<p>The trait has two functions, <code>execute</code> will be called to run that state to completion, <code>is_terminal_state</code> defines which states will end the state machine execution.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">/// These are all the possible states for this state machine
+</span><span style="color:#b48ead;">pub enum </span><span>FullStateMachine {
+</span><span>    DiscoverNodes(DiscoverNodes),
+</span><span>    ConnectNodes(ConnectNodes),
+</span><span>    Consensus(Consensus),
+</span><span>    Leader(Leader),
+</span><span>    Follower(Follower),
+</span><span>    Terminate,
+</span><span>}
+</span><span>
+</span><span>
+</span><span style="color:#b48ead;">impl </span><span>StateMachine </span><span style="color:#b48ead;">for </span><span>FullStateMachine {
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">execute</span><span>(</span><span style="color:#bf616a;">self</span><span>) -&gt; Result&lt;</span><span style="color:#b48ead;">Self</span><span>, Box&lt;dyn Error&gt;&gt;
+</span><span>    </span><span style="color:#b48ead;">where
+</span><span>        </span><span style="color:#b48ead;">Self</span><span>: Sized,
+</span><span>    {
+</span><span>        </span><span style="color:#65737e;">// Execution and transition are achieved in the same place
+</span><span>        </span><span style="color:#b48ead;">match </span><span style="color:#bf616a;">self </span><span>{
+</span><span>            FullStateMachine::DiscoverNodes(discover_nodes) =&gt; {
+</span><span>                </span><span style="color:#b48ead;">let</span><span> nodes = discover_nodes.</span><span style="color:#96b5b4;">execute</span><span>();
+</span><span>                Ok(FullStateMachine::ConnectNodes(ConnectNodes::new(nodes)))
+</span><span>            }
+</span><span>            FullStateMachine::ConnectNodes(connect_nodes) =&gt; {
+</span><span>                </span><span style="color:#b48ead;">let</span><span> connections = connect_nodes.</span><span style="color:#96b5b4;">execute</span><span>();
+</span><span>                Ok(FullStateMachine::Consensus(Consensus::new(connections)))
+</span><span>            }
+</span><span>            FullStateMachine::Consensus(consensus) =&gt; {
+</span><span>                </span><span style="color:#65737e;">// Conditional state transition
+</span><span>                </span><span style="color:#b48ead;">let </span><span>(is_leader, connections) = consensus.</span><span style="color:#96b5b4;">execute</span><span>();
+</span><span>                </span><span style="color:#b48ead;">if</span><span> is_leader {
+</span><span>                    Ok(FullStateMachine::Leader(Leader::new(connections)))
+</span><span>                } </span><span style="color:#b48ead;">else </span><span>{
+</span><span>                    Ok(FullStateMachine::Follower(Follower::new(connections)))
+</span><span>                }
+</span><span>            }
+</span><span>            FullStateMachine::Leader(leader) =&gt; {
+</span><span>                leader.</span><span style="color:#96b5b4;">execute</span><span>();
+</span><span>                Ok(FullStateMachine::Terminate)
+</span><span>            }
+</span><span>            FullStateMachine::Follower(follower) =&gt; {
+</span><span>                follower.</span><span style="color:#96b5b4;">execute</span><span>();
+</span><span>                Ok(FullStateMachine::Terminate)
+</span><span>            }
+</span><span>            FullStateMachine::Terminate =&gt; {
+</span><span>                </span><span style="color:#65737e;">// A proper error should be used here, to avoid panics.
+</span><span>                unreachable!()
+</span><span>            }
+</span><span>        }
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">is_terminal_state</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>) -&gt; </span><span style="color:#b48ead;">bool </span><span>{
+</span><span>        matches!(</span><span style="color:#bf616a;">self</span><span>, </span><span style="color:#b48ead;">Self</span><span>::Terminate)
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>What I like about this implementation:</p>
+<ul>
+<li>The executor is very straight forward, it starts with a initial state and then calls the <code>execute</code> function and replace the current state until it reaches a terminal state. </li>
+<li>The <code>execute</code> function consumes the current state and returns a new one, this makes internal state management simple and decoupled.</li>
+<li>Conditional state transition is easy to achieve, event with async code</li>
+</ul>
+<p>There is one detail about this particular implementation that I don’t like, the execution and transition happen in the same function, this can be a problem, particularly if the state machine has a lot of states. </p>
+<p>Let’s fix that</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">pub trait </span><span>StateMachine {
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">execute</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>) -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt;;
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">is_terminal_state</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>) -&gt; </span><span style="color:#b48ead;">bool</span><span>;
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">transition</span><span>(</span><span style="color:#bf616a;">self</span><span>) -&gt; </span><span style="color:#b48ead;">Self</span><span>;
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">executor</span><span>&lt;T: StateMachine&gt;(
+</span><span>    </span><span style="color:#bf616a;">initial_state</span><span>: T,
+</span><span>) -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> current_state = initial_state;
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">while </span><span>!current_state.</span><span style="color:#96b5b4;">is_terminal_state</span><span>() {
+</span><span>        current_state.</span><span style="color:#96b5b4;">execute</span><span>()?;
+</span><span>        current_state = current_state.</span><span style="color:#96b5b4;">transition</span><span>();
+</span><span>    }
+</span><span>
+</span><span>    Ok(())
+</span><span>}
+</span><span>
+</span></code></pre>
+<p>Now we have <code>execute</code> and <code>transition</code> as two separate functions, let’s see how the implementation of the state machine looks like.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">impl </span><span>StateMachine </span><span style="color:#b48ead;">for </span><span>FullStateMachine {
+</span><span>     </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">execute</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>) -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
+</span><span>        </span><span style="color:#b48ead;">match </span><span style="color:#bf616a;">self </span><span>{
+</span><span>            FullStateMachine::DiscoverNodes(state) =&gt; state.</span><span style="color:#96b5b4;">execute</span><span>(),
+</span><span>            FullStateMachine::ConnectNodes(state) =&gt; state.</span><span style="color:#96b5b4;">execute</span><span>(),
+</span><span>            FullStateMachine::Consensus(state) =&gt; state.</span><span style="color:#96b5b4;">execute</span><span>(),
+</span><span>            FullStateMachine::Leader(state) =&gt; state.</span><span style="color:#96b5b4;">execute</span><span>(),
+</span><span>            FullStateMachine::Follower(state) =&gt; state.</span><span style="color:#96b5b4;">execute</span><span>(),
+</span><span>            FullStateMachine::Terminate =&gt; unreachable!(),
+</span><span>        }
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">is_terminal_state</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>) -&gt; </span><span style="color:#b48ead;">bool </span><span>{
+</span><span>        matches!(</span><span style="color:#bf616a;">self</span><span>, </span><span style="color:#b48ead;">Self</span><span>::Terminate)
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">transition</span><span>(</span><span style="color:#bf616a;">self</span><span>) -&gt; </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>        </span><span style="color:#b48ead;">match </span><span style="color:#bf616a;">self </span><span>{
+</span><span>            FullStateMachine::DiscoverNodes(state) =&gt; {
+</span><span>                FullStateMachine::ConnectNodes(ConnectNodes::new(state.nodes))
+</span><span>            }
+</span><span>            FullStateMachine::ConnectNodes(state) =&gt; {
+</span><span>                FullStateMachine::Consensus(Consensus::new(state.connections))
+</span><span>            }
+</span><span>            FullStateMachine::Consensus(state) =&gt; {
+</span><span>                </span><span style="color:#b48ead;">if</span><span> state.is_leader {
+</span><span>                    FullStateMachine::Leader(Leader::new(state.connections))
+</span><span>                } </span><span style="color:#b48ead;">else </span><span>{
+</span><span>                    FullStateMachine::Follower(Follower::new(state.connections))
+</span><span>                }
+</span><span>            }
+</span><span>            FullStateMachine::Leader(_) =&gt; FullStateMachine::Terminate,
+</span><span>            FullStateMachine::Follower(_) =&gt; FullStateMachine::Terminate,
+</span><span>            FullStateMachine::Terminate =&gt; unreachable!(),
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>With the <code>execute</code> and <code>transition</code> functions, the code is simpler, easier to understand.</p>
+<p>There is a downside however, since <code>execute</code> takes a reference to self, each state needs to hold any intermediate state until <code>transition</code> is called. If we look at the <code>DiscoverNodes</code> implementation for both versions, we can see the difference.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">// First implementation, with self consuming state
+</span><span style="color:#b48ead;">struct </span><span>DiscoverNodes;
+</span><span>
+</span><span style="color:#b48ead;">impl </span><span>DiscoverNodes {
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">execute</span><span>(</span><span style="color:#bf616a;">self</span><span>) -&gt; Result&lt;(Vec&lt;IpAddr&gt;), Box&lt;dyn Error&gt;&gt; {
+</span><span>        Ok(</span><span style="color:#b48ead;">crate</span><span>::get_service_nodes())
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style="color:#65737e;">// Second implementation
+</span><span style="color:#b48ead;">struct </span><span>DiscoverNodes { 
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">nodes</span><span>: Vec&lt;IpAddr&gt;
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl </span><span>DiscoverNodes {
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">execute</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>) -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
+</span><span>        </span><span style="color:#65737e;">// We need to keep the state around until transition is called
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.nodes = </span><span style="color:#b48ead;">crate</span><span>::get_service_nodes(); 
+</span><span>        Ok(())
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>Both implementations we have seen so far expects that each <code>execute</code> call drives the state to completion, we can easily modify the code to react to external events. 
+Let’s see how to do it.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">pub trait </span><span>ExternallyDrivenTransition {
+</span><span>    </span><span style="color:#b48ead;">type </span><span>EventType;
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">execute</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>, </span><span style="color:#bf616a;">input</span><span>: </span><span style="color:#b48ead;">Self::</span><span>EventType) -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt;;
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">is_terminal_state</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>) -&gt; </span><span style="color:#b48ead;">bool</span><span>;
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">transition</span><span>(</span><span style="color:#bf616a;">self</span><span>) -&gt; </span><span style="color:#b48ead;">Self</span><span>;
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">externally_driven_executor</span><span>&lt;T: ExternallyDrivenTransition&gt;(
+</span><span>    </span><span style="color:#bf616a;">initial_state</span><span>: T,
+</span><span>    </span><span style="color:#bf616a;">events</span><span>: Receiver&lt;</span><span style="color:#b48ead;">T::</span><span>EventType&gt;,
+</span><span>) -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> current_state = initial_state;
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">while let </span><span>Ok(input) = events.</span><span style="color:#96b5b4;">recv</span><span>() {
+</span><span>        current_state.</span><span style="color:#96b5b4;">execute</span><span>(input)?;
+</span><span>
+</span><span>        current_state = current_state.</span><span style="color:#96b5b4;">transition</span><span>();
+</span><span>        </span><span style="color:#b48ead;">if</span><span> current_state.</span><span style="color:#96b5b4;">is_terminal_state</span><span>() {
+</span><span>            </span><span style="color:#b48ead;">break</span><span>;
+</span><span>        }
+</span><span>    }
+</span><span>
+</span><span>    Ok(())
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">pub enum </span><span>ExternalEvent {
+</span><span>...
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl </span><span>ExternallyDrivenTransition </span><span style="color:#b48ead;">for </span><span>FullStateMachine {
+</span><span>    </span><span style="color:#b48ead;">type </span><span>EventType = ExternalEvent;
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">execute</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>, </span><span style="color:#bf616a;">input</span><span>: </span><span style="color:#b48ead;">Self::</span><span>EventType) -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
+</span><span>        </span><span style="color:#b48ead;">match </span><span style="color:#bf616a;">self </span><span>{
+</span><span>            FullStateMachine::DiscoverNodes(state) =&gt; state.</span><span style="color:#96b5b4;">execute</span><span>(input),
+</span><span>            FullStateMachine::ConnectNodes(state) =&gt; state.</span><span style="color:#96b5b4;">execute</span><span>(input),
+</span><span>            FullStateMachine::Consensus(state) =&gt; state.</span><span style="color:#96b5b4;">execute</span><span>(input),
+</span><span>            FullStateMachine::Leader(state) =&gt; state.</span><span style="color:#96b5b4;">execute</span><span>(input),
+</span><span>            FullStateMachine::Follower(state) =&gt; state.</span><span style="color:#96b5b4;">execute</span><span>(input),
+</span><span>            FullStateMachine::Terminate =&gt; unreachable!(),
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<h2 id="downsides-of-enums">Downsides of enums</h2>
+<p>With the enum implementation, the transition control is tied to the enum, if you want to implement a similar state machine, you need to implement everything again. 
+This may not be a problem if you only have one process, or process that do not overlap at all, otherwise there will be some boilerplate code to be written.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">pub enum </span><span>FullStateMachine {
+</span><span>    DiscoverNodes(DiscoverNodes),
+</span><span>    ConnectNodes(ConnectNodes),
+</span><span>    Consensus(Consensus),
+</span><span>    Leader(Leader),
+</span><span>    Follower(Follower),
+</span><span>    Terminate,
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl </span><span>ExternallyDrivenTransition </span><span style="color:#b48ead;">for </span><span>FullStateMachine { 
+</span><span>... 
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">pub enum </span><span>ConsensusLessStateMachine {
+</span><span>    DiscoverNodes(DiscoverNodes),
+</span><span>    ConnectNodes(ConnectNodes),
+</span><span>    Leader(Leader),
+</span><span>    Follower(Follower),
+</span><span>    Terminate,
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl </span><span>ExternallyDrivenTransition </span><span style="color:#b48ead;">for </span><span>ConsensusLessStateMachine { 
+</span><span>... 
+</span><span>}
+</span></code></pre>
+<h1 id="implementation-2-traits">Implementation #2: Traits</h1>
+<p>One way to address the downside from the enum implementation, is to implement a trait for the states and have an executor that works with <code>Box&lt;dyn State&gt;</code> states, the implementation will look like this. </p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">pub trait </span><span>State {
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">execute</span><span>(</span><span style="color:#bf616a;">self</span><span>: Box&lt;</span><span style="color:#b48ead;">Self</span><span>&gt;) -&gt; Result&lt;Option&lt;Box&lt;dyn State&gt;&gt;, Box&lt;dyn Error&gt;&gt;;
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">executor</span><span>(</span><span style="color:#bf616a;">initial_state</span><span>: Box&lt;dyn State&gt;) -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> current_state = Some(initial_state);
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">while let </span><span>Some(state) = current_state {
+</span><span>        current_state = state.</span><span style="color:#96b5b4;">execute</span><span>()?;
+</span><span>    }
+</span><span>
+</span><span>    Ok(())
+</span><span>}
+</span></code></pre>
+<p>The implementation is very similar to the enum, except the termination control is done by return an <code>Option</code>.</p>
+<hr />
+<p>This version has some clear downsides over the enum implementation.</p>
+<p>First, it introduces a performance penalty by boxing the state, this may or may not be important for your use case, but it is something to have in mind.</p>
+<p>Second, it is even less re-usable than the enum version, because it delegates the flow to inside the state. Let’s see how the <code>DiscoverNodes</code> would look like with this version</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">pub struct </span><span>DiscoverNodes {}
+</span><span style="color:#b48ead;">impl </span><span>State </span><span style="color:#b48ead;">for </span><span>DiscoverNodes {
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">execute</span><span>(</span><span style="color:#bf616a;">self</span><span>: Box&lt;</span><span style="color:#b48ead;">Self</span><span>&gt;) -&gt; Result&lt;Option&lt;Box&lt;dyn State&gt;&gt;, Box&lt;dyn Error&gt;&gt; {
+</span><span>        </span><span style="color:#b48ead;">let</span><span> nodes = </span><span style="color:#b48ead;">crate</span><span>::get_service_nodes();
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Here we define what is the next state
+</span><span>        Ok(Some(Box::new(ConnectNodes::new(nodes))))
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>This design makes the code even harder to understand and to reuse. If you want to have a different state after the <code>DiscoverNodes</code>, you need to introduce an internal condition and way to drive that condition, and this becomes even more cumbersome as you go further in the state machine flow, making this a very bad choice for a state machine design, considering what our goals are.</p>
+<p>However, there is another way we can implement this, by using one of Rust nicest features, blanket implementations!</p>
+<h1 id="implementation-3-composable-traits">Implementation #3: Composable traits</h1>
+<p>In Rust, it is possible to implement a trait for every type in your code</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">impl</span><span>&lt;T&gt; MyTrait </span><span style="color:#b48ead;">for </span><span>T {}
+</span></code></pre>
+<p>We can use this feature to implement our state machine in a very composable way</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span>first_state::new()
+</span><span>    .</span><span style="color:#96b5b4;">and_then</span><span>(SecondState::new)
+</span><span>    .</span><span style="color:#96b5b4;">and_then</span><span>(ThirdState::new)
+</span><span>    .</span><span style="color:#96b5b4;">execute</span><span>();
+</span></code></pre>
+<p>Let’s see how we can do that</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">pub trait </span><span>State {
+</span><span>    </span><span style="color:#b48ead;">type </span><span>Output;
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">execute</span><span>(</span><span style="color:#bf616a;">self</span><span>) -&gt; Result&lt;</span><span style="color:#b48ead;">Self::</span><span>Output, Box&lt;dyn Error&gt;&gt;;
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">pub trait </span><span>StateComposer {}
+</span><span>
+</span><span style="color:#65737e;">// Implement StateComposer for every State in our crate
+</span><span style="color:#b48ead;">impl</span><span>&lt;T&gt; StateComposer </span><span style="color:#b48ead;">for </span><span>T </span><span style="color:#b48ead;">where</span><span> T: State {}
+</span></code></pre>
+<p>Nice, we have our base structure in place, now we are going to add functions to be able to compose states together.</p>
+<h2 id="andthen">AndThen</h2>
+<p>The <code>and_then</code> implementation will accept a closure that receives the output from the previous state and creates a new state. </p>
+<p>First we need a struct to hold the State transition</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">pub struct </span><span>AndThen&lt;T, U, F&gt; {
+</span><span>    </span><span style="color:#bf616a;">previous</span><span>: T,
+</span><span>    </span><span style="color:#bf616a;">map_fn</span><span>: F,
+</span><span>    </span><span style="color:#bf616a;">_marker</span><span>: PhantomData&lt;U&gt;,
+</span><span>}
+</span></code></pre>
+<p>Without constraints, the struct itself is nothing special.</p>
+<ul>
+<li><code>previous: T</code> holds “everything before the .” in our chain call.</li>
+<li><code>map_fn: F</code> holds our closure that constructs the next step.</li>
+<li><code>_marker: PhantomData&lt;U&gt;</code> holds the return type of our state</li>
+</ul>
+<p>Fun fact, without the <code>_marker</code> field, if you try to compile the code with the nightly async feature, it will crash the compiler.</p>
+<hr />
+<p>Now we need to add a new function to the <code>StateComposer</code> trait</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">pub trait </span><span>StateComposer {
+</span><span>    </span><span style="color:#65737e;">// The StateComposer just need to return our struct, nothing more
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">and_then</span><span>&lt;U, F&gt;(</span><span style="color:#bf616a;">self</span><span>, </span><span style="color:#bf616a;">map_fn</span><span>: F) -&gt; AndThen&lt;</span><span style="color:#b48ead;">Self</span><span>, U, F&gt;
+</span><span>    </span><span style="color:#b48ead;">where
+</span><span>        </span><span style="color:#b48ead;">Self</span><span>: State + Sized,
+</span><span>        U: State,
+</span><span>        F: FnOnce(</span><span style="color:#b48ead;">Self::</span><span>Output) -&gt; U,
+</span><span>    {
+</span><span>        AndThen {
+</span><span>            previous: </span><span style="color:#bf616a;">self</span><span>,
+</span><span>            map_fn,
+</span><span>            _marker: Default::default(),
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>When we call this function, it will build a new State type, and for every new call, a new type will be built, very similar to what we have with Iterators, for example:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">let</span><span> state = One::new().</span><span style="color:#96b5b4;">and_then</span><span>(|</span><span style="color:#bf616a;">out</span><span>: String| Two::new(out));
+</span><span style="color:#65737e;">// state: AndThen&lt;One, Two, fn(String) -&gt; Two&gt;
+</span><span>
+</span><span style="color:#b48ead;">let</span><span> state = state.</span><span style="color:#96b5b4;">and_then</span><span>(|</span><span style="color:#bf616a;">out</span><span>: </span><span style="color:#b48ead;">u64</span><span>| Third::new(out));
+</span><span style="color:#65737e;">// state: AndThen&lt;AndThen&lt;One, Two, fn(String) -&gt; Two&gt;, Third, fn(u64) -&gt; Third&gt;
+</span></code></pre>
+<p>Last but not least, we need to implement the <code>State</code> trait for our new <code>AndThen</code> struct</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">impl</span><span>&lt;T, U, F&gt; State </span><span style="color:#b48ead;">for </span><span>AndThen&lt;T, U, F&gt;
+</span><span style="color:#b48ead;">where
+</span><span>    T: State,
+</span><span>    U: State,
+</span><span>    F: FnOnce(</span><span style="color:#b48ead;">T::</span><span>Output) -&gt; U,
+</span><span>{
+</span><span>    </span><span style="color:#b48ead;">type </span><span>Output = U::Output;
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">execute</span><span>(</span><span style="color:#bf616a;">self</span><span>) -&gt; Result&lt;</span><span style="color:#b48ead;">Self::</span><span>Output, Box&lt;dyn Error&gt;&gt;
+</span><span>    </span><span style="color:#b48ead;">where
+</span><span>        </span><span style="color:#b48ead;">Self</span><span>: Sized,
+</span><span>    {
+</span><span>        </span><span style="color:#65737e;">// Execute the previous state, or &quot;everything before the .&quot;
+</span><span>        </span><span style="color:#b48ead;">let</span><span> previous_output = </span><span style="color:#bf616a;">self</span><span>.previous.</span><span style="color:#96b5b4;">execute</span><span>()?;
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// call the map function to create the next task
+</span><span>        </span><span style="color:#b48ead;">let</span><span> next_task = (</span><span style="color:#bf616a;">self</span><span>.map_fn)(previous_output);
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// execute the next task
+</span><span>        next_task.</span><span style="color:#96b5b4;">execute</span><span>()
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>Neat! Now that we have everything in place, we can use our States in a very composable way.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span>DiscoverNodes
+</span><span>    .</span><span style="color:#96b5b4;">and_then</span><span>(ConnectNodes::new)
+</span><span>    .</span><span style="color:#96b5b4;">and_then</span><span>(Consensus::new)
+</span><span>    .</span><span style="color:#96b5b4;">and_then</span><span>(LeaderOrFollower::new)
+</span><span>    .</span><span style="color:#96b5b4;">execute</span><span>()
+</span></code></pre>
+<p>And if we want a different flow using the same states? Easy!!!</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span>DiscoverNodes
+</span><span>    .</span><span style="color:#96b5b4;">and_then</span><span>(ConnectNodes::new)
+</span><span>    .</span><span style="color:#96b5b4;">and_then</span><span>(Leader::new)
+</span><span>    .</span><span style="color:#96b5b4;">execute</span><span>()
+</span></code></pre>
+<p>The <code>StateComposer</code> trait can be extended with how many functions you want, some examples can be:</p>
+<ul>
+<li><code>and</code> that ignores the output from the previous state</li>
+<li><code>or</code> or <code>and_default</code> that will continue execution even if the previous steps have failed</li>
+<li><code>loop</code> that will execute the same state multiple times</li>
+</ul>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span>DiscoverNodes
+</span><span>    .</span><span style="color:#96b5b4;">and_then</span><span>(ConnectNodes::new)
+</span><span>    .</span><span style="color:#96b5b4;">and_then</span><span>(Consensus::new)
+</span><span>    .</span><span style="color:#96b5b4;">and_then</span><span>(LeaderOrFollower::new)
+</span><span>    .</span><span style="color:#96b5b4;">and_then_default_to</span><span>(|| Daemon::new().</span><span style="color:#b48ead;">loop</span><span>())
+</span><span>    .</span><span style="color:#96b5b4;">execute</span><span>()
+</span></code></pre>
+<p>The major benefit of this approach, your workflow is validated at compile time and it is very explicit.</p>
+<p>However, this approach have one big downside compared to the previous ones, it doesn’t allow conditional states, if you need conditional states, you need to implement an additional State.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">pub struct </span><span>LeaderOrFollower {
+</span><span>    </span><span style="color:#bf616a;">is_leader</span><span>: </span><span style="color:#b48ead;">bool</span><span>,
+</span><span>    </span><span style="color:#bf616a;">connections</span><span>: Vec&lt;NodeConnection&gt;,
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl </span><span>State </span><span style="color:#b48ead;">for </span><span>LeaderOrFollower {
+</span><span>    </span><span style="color:#b48ead;">type </span><span>Output = ();
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">execute</span><span>(</span><span style="color:#bf616a;">self</span><span>) -&gt; Result&lt;</span><span style="color:#b48ead;">Self::</span><span>Output, Box&lt;dyn Error&gt;&gt; {
+</span><span>        </span><span style="color:#b48ead;">if </span><span style="color:#bf616a;">self</span><span>.is_leader {
+</span><span>            Leader::new(</span><span style="color:#bf616a;">self</span><span>.connections).</span><span style="color:#96b5b4;">execute</span><span>()
+</span><span>        } </span><span style="color:#b48ead;">else </span><span>{
+</span><span>            Follower::new(</span><span style="color:#bf616a;">self</span><span>.connections).</span><span style="color:#96b5b4;">execute</span><span>()
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<h1 id="benchmarks">Benchmarks</h1>
+<p>There is a benchmark in the github repo to compare the overhead of each of these implementations, it is no surprise that <code>Box&lt;dyn State&gt;</code> has the worst performance of all the implementations we have here.</p>
+
+  
+  
+    
+    
+  
+  <img src="https://balliegojr.github.io./violin.svg" class="center" style="background-color: white" />
+
+<p>I am not exactly sure of why the composable performance is better, I believe it is due to the lack of an executor loop function. </p>
+<p>The benchmark only looks at execution speed, I don’t know how to do a memory benchmark, but my guess is the composable approach will have the worst memory consumption of all three implementations.</p>
+<h1 id="conclusion">Conclusion</h1>
+<p>Time for a very opinionated conclusion…</p>
+<p>My favorite approach is, of course, the composable trait implementation - I even had to write a blog post about it!!! - I think it makes for very clean and reusable code with minimal overhead. </p>
+<p>The enum implementation - with all the other variations you will find around - is simple and easy to put together, however it is not good if your intent is to reuse or make many similar processes with few different steps.</p>
+<p>The dyn trait implementation was my first attempt to implement a state machine by using traits instead of enums. The only benefit it provides over the enum implementation is decoupling the States from each other, so you don’t have a [potentially huge] match statement with all the states and transitions. But overall, I think I wouldn’t use that implementation at all.</p>
+<p>&nbsp; </p>
+<fieldset>
+    
+
+    
+        If you find any issues in the post, please open an issue in the github repo.
+    
+</fieldset>
+
+
+        </div>
+
+        
+        <div class="pagination">
+            <div class="pagination__title">
+                <span class="pagination__title-h">Thanks for reading! Read other posts?</span>
+                <hr />
+            </div>
+            <div class="pagination__buttons">
+                
+                    <span class="button next">
+                        <a href="https://balliegojr.github.io/traits-for-beginners/">
+                            <span class="button__text">Traits for beginners</span>&nbsp;
+                            <span class="button__icon">→</span>
+                        </a>
+                    </span>
+                </div>
+        </div>
+    
+    </div>
+
+    </div>
+
+    
+    <footer class="footer">
+        <div class="footer__inner">
+                <div class="copyright">
+                        <span>© 
+    2024
+ Ilson Balliego</span>
+                    <span class="copyright-theme">
+                        <span class="copyright-theme-sep">:: </span>
+                        Theme: <a href="https://github.com/pawroman/zola-theme-terminimal/">Terminimal</a> by pawroman
+                    </span>
+                </div>
+            </div>
+    </footer>
+    
+
+</div>
+</body>
+
+</html>
+
+
+

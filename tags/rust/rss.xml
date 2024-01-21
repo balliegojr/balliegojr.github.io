@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:atom="http://www.w3.org/2005/Atom" version="2.0">
+    <channel>
+      <title>balliegojr - rust</title>
+      <link>https://balliegojr.github.io</link>
+      <description></description>
+      <generator>Zola</generator>
+      <language>en</language>
+      <atom:link href="https://balliegojr.github.io/tags/rust/rss.xml" rel="self" type="application/rss+xml"/>
+      <lastBuildDate>Sun, 07 Jan 2024 00:00:00 +0000</lastBuildDate>
+      <item>
+          <title>Traits for beginners</title>
+          <pubDate>Sun, 07 Jan 2024 00:00:00 +0000</pubDate>
+          <author>Unknown</author>
+          <link>https://balliegojr.github.io/traits-for-beginners/</link>
+          <guid>https://balliegojr.github.io/traits-for-beginners/</guid>
+          <description xml:base="https://balliegojr.github.io/traits-for-beginners/">&lt;p&gt;This post is for those who are starting their journey with coding and Rust, it is an introduction to traits, and I will try to explain what are traits and how to use them.&lt;&#x2F;p&gt;
+</description>
+      </item>
+      <item>
+          <title>Taking advantage of state machine concepts to organize code</title>
+          <pubDate>Mon, 15 May 2023 00:00:00 +0000</pubDate>
+          <author>Unknown</author>
+          <link>https://balliegojr.github.io/state-machine/</link>
+          <guid>https://balliegojr.github.io/state-machine/</guid>
+          <description xml:base="https://balliegojr.github.io/state-machine/">&lt;p&gt;In this post we are going to explore the concept of a state machine to help organize our code. The goal is to explore different code designs, rather than build a full blown state machine.&lt;&#x2F;p&gt;
+</description>
+      </item>
+    </channel>
+</rss>
